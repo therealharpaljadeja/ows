@@ -8,6 +8,19 @@ MIN_RUST="1.70.0"
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 err()   { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
+TMPDIR=""
+cleanup() {
+  if [ -n "$TMPDIR" ] && [ -d "$TMPDIR" ]; then
+    rm -rf "$TMPDIR"
+  fi
+}
+trap cleanup EXIT
+
+# --- Check prerequisites ---
+check_git() {
+  command -v git &>/dev/null || err "git is required but not found. Install git first."
+}
+
 # --- Check / install Rust ---
 install_rust() {
   if command -v rustup &>/dev/null; then
@@ -35,19 +48,72 @@ ensure_cargo() {
 # --- Build ---
 build() {
   local src_dir="$1"
-  info "Building lws workspace..."
+  info "Building lws..."
   cd "$src_dir/lws"
   cargo build --workspace --release
   info "Build complete"
 }
 
-# --- Install binary (future: when lws-cli crate is added) ---
+# --- Install binary to INSTALL_DIR ---
 install_bin() {
   local src_dir="$1"
-  info "Running tests to verify build..."
-  cd "$src_dir/lws"
-  cargo test --workspace --release --quiet
-  info "All tests passed"
+  local bin_path="$src_dir/lws/target/release/lws"
+
+  if [ ! -f "$bin_path" ]; then
+    err "Binary not found at $bin_path — build may have failed"
+  fi
+
+  mkdir -p "$INSTALL_DIR"
+  cp "$bin_path" "$INSTALL_DIR/lws"
+  chmod +x "$INSTALL_DIR/lws"
+  info "Installed lws to $INSTALL_DIR/lws"
+}
+
+# --- Add INSTALL_DIR to PATH in shell rc file ---
+setup_path() {
+  # Skip if already on PATH
+  if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
+    return
+  fi
+
+  local line="export PATH=\"$INSTALL_DIR:\$PATH\""
+  local shell_name
+  shell_name="$(basename "${SHELL:-/bin/bash}")"
+
+  case "$shell_name" in
+    zsh)
+      local rc="$HOME/.zshrc"
+      if [ -f "$rc" ] && grep -qF "$INSTALL_DIR" "$rc"; then
+        return
+      fi
+      echo "$line" >> "$rc"
+      info "Added $INSTALL_DIR to PATH in $rc"
+      ;;
+    bash)
+      local rc="$HOME/.bashrc"
+      if [ -f "$HOME/.bash_profile" ]; then
+        rc="$HOME/.bash_profile"
+      fi
+      if [ -f "$rc" ] && grep -qF "$INSTALL_DIR" "$rc"; then
+        return
+      fi
+      echo "$line" >> "$rc"
+      info "Added $INSTALL_DIR to PATH in $rc"
+      ;;
+    fish)
+      local rc="$HOME/.config/fish/config.fish"
+      local fish_line="fish_add_path $INSTALL_DIR"
+      if [ -f "$rc" ] && grep -qF "$INSTALL_DIR" "$rc"; then
+        return
+      fi
+      mkdir -p "$(dirname "$rc")"
+      echo "$fish_line" >> "$rc"
+      info "Added $INSTALL_DIR to PATH in $rc"
+      ;;
+    *)
+      info "Could not detect shell — add $INSTALL_DIR to your PATH manually"
+      ;;
+  esac
 }
 
 # --- Main ---
@@ -55,28 +121,21 @@ main() {
   info "LWS installer"
   echo
 
+  check_git
   install_rust
   ensure_cargo
 
-  # Determine source directory
-  if [ -f "lws/Cargo.toml" ]; then
-    SRC_DIR="$(pwd)"
-    info "Using local source: $SRC_DIR/lws"
-  elif [ -f "Cargo.toml" ] && grep -q 'lws-core' Cargo.toml 2>/dev/null; then
-    SRC_DIR="$(cd .. && pwd)"
-    info "Using local source: $SRC_DIR/lws"
-  else
-    SRC_DIR="$(mktemp -d)"
-    info "Cloning repository..."
-    git clone --depth 1 "$REPO" "$SRC_DIR"
-  fi
+  TMPDIR="$(mktemp -d)"
+  info "Cloning repository..."
+  git clone --depth 1 "$REPO" "$TMPDIR" --quiet
 
-  build "$SRC_DIR"
-  install_bin "$SRC_DIR"
+  build "$TMPDIR"
+  install_bin "$TMPDIR"
+  setup_path
 
   echo
-  info "LWS installed successfully"
-  info "Libraries built at: $SRC_DIR/lws/target/release"
+  info "LWS installed successfully!"
+  info "Run 'lws --help' to get started (you may need to restart your shell)"
 }
 
 main "$@"

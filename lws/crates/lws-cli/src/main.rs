@@ -9,7 +9,7 @@ use lws_signer::SignerError;
 
 /// Lightweight Wallet Signer CLI
 #[derive(Parser)]
-#[command(name = "lws", version, about)]
+#[command(name = "lws", version, about, long_version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("LWS_GIT_COMMIT"), ")"))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -66,6 +66,12 @@ enum Commands {
     },
     /// List all saved wallets
     ListWallets,
+    /// Update lws to the latest version
+    Update {
+        /// Force rebuild even if already on the latest commit
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -120,5 +126,6 @@ fn run(cli: Cli) -> Result<(), CliError> {
             words,
         } => commands::wallet::create(&name, &chain, words),
         Commands::ListWallets => commands::wallet::list(),
+        Commands::Update { force } => commands::update::run(force),
     }
 }
