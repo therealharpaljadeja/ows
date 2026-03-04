@@ -101,6 +101,8 @@ jobs:
     needs: python-wheels
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      id-token: write
 
     steps:
       - uses: actions/download-artifact@v4
@@ -110,12 +112,7 @@ jobs:
           path: dist
 
       - name: Publish to PyPI
-        uses: PyO3/maturin-action@v1
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        with:
-          command: upload
-          args: --skip-existing dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   node-addons:
     strategy:
@@ -196,7 +193,7 @@ jobs:
           path: bindings/node/artifacts
 
       - name: Move artifacts to platform packages
-        run: npx napi artifacts --dir artifacts
+        run: npx napi artifacts --dir artifacts --dist .
 
       - name: Publish platform packages
         env:
