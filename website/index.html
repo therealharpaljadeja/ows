@@ -88,23 +88,62 @@
       </div>
     </div>
 
-    <!-- Code Example -->
-    <div class="code-block-wrapper" style="margin-top: 2rem;">
-      <div class="code-block-header">
-        <span class="code-block-title">Sign a transaction with one call</span>
-        <button class="code-block-copy" onclick="copyCode(this)">Copy</button>
+    <!-- Code Examples -->
+    <div style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+      <div class="code-block-wrapper">
+        <div class="code-block-header">
+          <span class="code-block-title">Node.js</span>
+          <button class="code-block-copy" onclick="copyCode(this)">Copy</button>
+        </div>
+        <div class="code-block">
+<pre><span class="keyword">import</span> { createWallet, signMessage }
+  <span class="keyword">from</span> <span class="string">"@local-wallet-standard/node"</span>;
+
+<span class="keyword">const</span> wallet = createWallet(<span class="string">"agent-treasury"</span>);
+<span class="comment">// => accounts for EVM, Solana, BTC, Cosmos, Tron</span>
+
+<span class="keyword">const</span> sig = signMessage(
+  <span class="string">"agent-treasury"</span>, <span class="string">"evm"</span>, <span class="string">"hello"</span>
+);
+console.log(sig.signature);</pre>
+        </div>
       </div>
-      <div class="code-block">
-<pre><span class="keyword">const</span> result = <span class="keyword">await</span> lws.signAndSend({
-  walletId: <span class="string">"agent-treasury"</span>,
-  chainId:  <span class="string">"eip155:8453"</span>,        <span class="comment">// Base</span>
-  transaction: {
-    to:    <span class="string">"0x4B08...4D2dB"</span>,
-    value: <span class="string">"10000000000000000"</span>,  <span class="comment">// 0.01 ETH</span>
-  }
-});
-<span class="comment">// Policy engine evaluates -> Simulation runs -> Key signs in enclave</span>
-<span class="comment">// => { transactionHash: "0xabc...", status: "confirmed" }</span></pre>
+      <div class="code-block-wrapper">
+        <div class="code-block-header">
+          <span class="code-block-title">Python</span>
+          <button class="code-block-copy" onclick="copyCode(this)">Copy</button>
+        </div>
+        <div class="code-block">
+<pre><span class="keyword">from</span> local_wallet_standard <span class="keyword">import</span> (
+    create_wallet, sign_message
+)
+
+wallet = create_wallet(<span class="string">"agent-treasury"</span>)
+<span class="comment"># => accounts for EVM, Solana, BTC, Cosmos, Tron</span>
+
+sig = sign_message(
+    <span class="string">"agent-treasury"</span>, <span class="string">"evm"</span>, <span class="string">"hello"</span>
+)
+print(sig[<span class="string">"signature"</span>])</pre>
+        </div>
+      </div>
+      <div class="code-block-wrapper">
+        <div class="code-block-header">
+          <span class="code-block-title">CLI</span>
+          <button class="code-block-copy" onclick="copyCode(this)">Copy</button>
+        </div>
+        <div class="code-block">
+<pre><span class="comment"># Create a wallet</span>
+lws wallet create \
+  --name <span class="string">"agent-treasury"</span>
+<span class="comment"># => accounts for EVM, Solana, BTC, Cosmos, Tron</span>
+
+<span class="comment"># Sign a message</span>
+lws sign message \
+  --wallet <span class="string">"agent-treasury"</span> \
+  --chain evm \
+  --message <span class="string">"hello"</span></pre>
+        </div>
       </div>
     </div>
   </section>
