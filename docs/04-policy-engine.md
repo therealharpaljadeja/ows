@@ -2,6 +2,29 @@
 
 > How transaction policies are defined, evaluated, and enforced before any key material is touched.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Two-tier access model (owner vs agent) | Not started | |
+| API key creation (`lws key create`) | Not started | |
+| API key file format + storage (`~/.lws/keys/`) | Not started | |
+| Policy file format + storage (`~/.lws/policies/`) | Not started | |
+| Policy executable protocol (JSON-RPC over stdin/stdout) | Not started | |
+| PolicyContext structure (piped to stdin) | Not started | |
+| PolicyResult structure (read from stdout) | Not started | |
+| Policy attachment to API keys | Not started | |
+| Default-deny enforcement | Not started | |
+| 5-second timeout + kill on timeout | Not started | |
+| Failure semantics (deny on non-zero exit, bad JSON) | Not started | |
+| Policy actions (`deny` / `warn`) | Not started | |
+| AND semantics (all policies must allow) | Not started | |
+| `lws policy create` CLI command | Not started | |
+| `lws key create` CLI command | Not started | |
+| Audit log integration for policy results | Not started | |
+
+**This entire spec is unimplemented.** The policy engine is the core security boundary for agent access and is the highest-priority gap.
+
 ## Design Decision
 
 **LWS uses a two-tier access model: the wallet owner has unrestricted (sudo) access, while agents authenticate via API keys whose attached policies are evaluated before the signing enclave is invoked. Policies are attached to API keys, not wallets — wallets are dumb containers for key material. Default behavior is deny-by-default when a policy is attached to a key — only transactions that pass all of the key's policies are signed.**

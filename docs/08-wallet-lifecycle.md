@@ -2,6 +2,30 @@
 
 > How wallets are created, imported, exported, backed up, recovered, and migrated.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Create from new mnemonic | Done | `create_wallet()` in CLI + bindings |
+| Create from existing private key | Done | `import_wallet_private_key()` |
+| Import: BIP-39 mnemonic | Done | `import_wallet_mnemonic()` |
+| Import: Ethereum Keystore v3 | Not started | No v3 import logic |
+| Import: WIF (Bitcoin) | Not started | |
+| Import: Solana keypair JSON | Not started | |
+| Export: mnemonic / private key | Done | `export_wallet()` |
+| Export: Keystore v3 format | Not started | |
+| Backup: encrypted tar.gz (`lws backup`) | Not started | `BackupConfig` struct exists but unused |
+| Restore from backup (`lws restore`) | Not started | |
+| Automated backup scheduling | Not started | Config field exists but unused |
+| Recovery with BIP-44 gap limit scanning | Not started | No `lws wallet recover` command |
+| Deletion: basic file removal | Done | `delete_wallet()` |
+| Deletion: secure overwrite with random bytes before unlink | Not started | Uses plain `fs::remove_file()` |
+| Deletion: remove wallet from API key `wallet_ids` | Not started | No API key system |
+| Key rotation (`lws wallet rotate`) | Not started | |
+| Wallet discovery with glob/policy filtering | Not started | Basic `list_wallets()` only |
+| Rename wallet | Done | `rename_wallet()` |
+| `--confirm` flag for destructive operations | Done | CLI prompts for confirmation |
+
 ## Design Decision
 
 **LWS defines a complete wallet lifecycle with explicit operations for creation, import (from existing standards), export (to portable formats), backup, and recovery. All lifecycle operations maintain the same key isolation guarantees as signing — private key material is handled exclusively inside the signing enclave.**

@@ -2,6 +2,17 @@
 
 > How LWS identifies chains, accounts, and assets without being locked to any single ecosystem.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| CAIP-2 chain ID parsing (`namespace:reference`) | Done | `lws-core/src/caip.rs` |
+| Registered namespaces (eip155, solana, cosmos, bip122, tron) | Done | `lws-core/src/chain.rs` |
+| CAIP-10 account IDs (`chain_id:address`) | Done | Stored in wallet `account_id` field |
+| CAIP-27 method invocation routing | Not started | Not used in CLI or bindings |
+| Asset identification (`chain_id:contract` / `native`) | Not started | No asset ID scheme |
+| Shorthand aliases (e.g. `ethereum` → `eip155:1`) | Done | `parse_chain()` in CLI |
+
 ## Design Decision
 
 **LWS uses CAIP (Chain Agnostic Improvement Proposals) identifiers as the canonical addressing scheme for all chains, accounts, and method invocations.**

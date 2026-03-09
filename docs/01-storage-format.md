@@ -2,6 +2,22 @@
 
 > How wallets are encrypted, structured, and stored on the local filesystem.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Vault directory (`~/.lws/wallets/`) | Done | `lws-lib/src/vault.rs` |
+| Wallet file format (LWS envelope over Keystore v3) | Done | `lws-core/src/wallet_file.rs` |
+| Filesystem permissions (700 dirs, 600 files) | Done | `lws-lib/src/vault.rs` |
+| Permission verification on startup | Partial | Warns but does not refuse to operate |
+| Audit log (`~/.lws/logs/audit.jsonl`) | Done | `lws-cli/src/audit.rs` |
+| Crypto object (AES-256-GCM + scrypt) | Done | `lws-signer/src/crypto.rs` |
+| Backward compat (Keystore v3 import) | Not started | No v3 import/re-wrap logic |
+| `~/.lws/keys/` directory + API key files | Not started | No API key system |
+| `~/.lws/policies/` directory + policy files | Not started | No policy system |
+| `~/.lws/plugins/` directory | Not started | Plugins are hardcoded |
+| Passphrase 12-char minimum enforcement | Not started | No validation at creation time |
+
 ## Design Decision
 
 **LWS uses an extended Ethereum Keystore v3 format with per-chain type adaptations, stored in a well-known directory with strict filesystem permissions.**

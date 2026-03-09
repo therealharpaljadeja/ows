@@ -2,6 +2,30 @@
 
 > How AI agents, CLI tools, and applications access LWS wallets through native language bindings.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `generate_mnemonic(words?)` | Done | 12 or 24 words |
+| `derive_address(mnemonic, chain, index?)` | Done | |
+| `create_wallet(name, chain, passphrase, ...)` | Done | |
+| `import_wallet_mnemonic(...)` | Done | |
+| `import_wallet_private_key(...)` | Done | |
+| `list_wallets(vault_path?)` | Done | |
+| `get_wallet(name_or_id, vault_path?)` | Done | |
+| `delete_wallet(name_or_id, vault_path?)` | Done | |
+| `export_wallet(name_or_id, passphrase, ...)` | Done | |
+| `rename_wallet(name_or_id, new_name, ...)` | Done | |
+| `sign_transaction(...)` | Done | |
+| `sign_message(...)` | Done | |
+| `sign_and_send(...)` | Done | |
+| Node.js NAPI bindings | Done | `bindings/node/src/lib.rs` |
+| Python PyO3 bindings | Done | `bindings/python/src/lib.rs` |
+| API key scoping (agent sees only permitted wallets) | Not started | No API key system |
+| Policy evaluation on agent requests | Not started | No policy engine |
+| MCP server | Not started | |
+| Audit logging from bindings (not just CLI) | Not started | Only CLI logs to audit |
+
 ## Design Decision
 
 **LWS exposes wallet operations through native language bindings backed by the core Rust implementation. Bindings call directly into the `lws-lib` crate via FFI — no HTTP server or subprocess is required. They are compiled native modules that run in-process.**

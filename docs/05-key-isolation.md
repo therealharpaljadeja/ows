@@ -2,6 +2,26 @@
 
 > How LWS prevents private keys from leaking to agents, LLMs, logs, or parent processes.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Core dump disabling (`PR_SET_DUMPABLE` / `PT_DENY_ATTACH`) | Done | `lws-signer/src/process_hardening.rs` |
+| `RLIMIT_CORE` set to 0 | Done | `process_hardening.rs` |
+| Memory locking (`mlock`) for key material | Done | `lws-signer/src/zeroizing.rs` |
+| Zeroization on drop (`SecretBytes`) | Done | `zeroizing.rs` uses `zeroize` crate |
+| Signal handlers (SIGTERM/SIGINT/SIGHUP cleanup) | Done | `process_hardening.rs` |
+| Key cache with TTL + LRU eviction | Done | `lws-signer/src/key_cache.rs` (5s TTL, 32 entries) |
+| Subprocess signing enclave (child process) | Not started | Keys are decrypted in-process, not isolated |
+| Unix domain socket / pipe IPC | Not started | No enclave transport |
+| JSON-RPC enclave protocol (`sign`, `sign_message`, `unlock`, `lock`, `status`) | Not started | |
+| Passphrase delivery: interactive prompt | Not started | |
+| Passphrase delivery: file descriptor | Not started | |
+| Passphrase delivery: env var (`LWS_PASSPHRASE`) with immediate clear | Partial | Passphrase passed as param, not read from env |
+| Session-based unlock/lock | Not started | Each operation re-decrypts (or uses cache) |
+
+**Note:** The current implementation provides in-process hardening (mlock, zeroize, anti-debug) but does NOT implement the subprocess isolation model described in the spec. Keys are decrypted within the calling process's address space.
+
 ## Design Decision
 
 **LWS mandates that key material is decrypted and used exclusively inside an isolated signing process. The parent process (agent, CLI, app) never has access to plaintext keys. This follows the principle that agents should be able to _use_ wallets without being able to _extract_ keys.**

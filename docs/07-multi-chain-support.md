@@ -2,6 +2,28 @@
 
 > How LWS supports EVM, Solana, Cosmos, Bitcoin, Tron, and future chains through a plugin architecture.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `ChainSigner` trait (`deriveAddress`, `sign`, `signMessage`, `signTransaction`) | Done | `lws-signer/src/traits.rs` |
+| EVM plugin (secp256k1, coin 60, EIP-55 addresses) | Done | `lws-signer/src/chains/evm.rs` |
+| Solana plugin (ed25519, coin 501, base58 addresses) | Done | `lws-signer/src/chains/solana.rs` |
+| Bitcoin plugin (secp256k1, coin 0, bech32 addresses) | Done | `lws-signer/src/chains/bitcoin.rs` |
+| Cosmos plugin (secp256k1, coin 118, bech32 addresses) | Done | `lws-signer/src/chains/cosmos.rs` |
+| Tron plugin (secp256k1, coin 195, base58check addresses) | Done | `lws-signer/src/chains/tron.rs` |
+| HD derivation: BIP-32 (secp256k1) | Done | `lws-signer/src/hd.rs` |
+| HD derivation: SLIP-10 (ed25519) | Done | `lws-signer/src/hd.rs` |
+| Default RPC endpoints (11 chains) | Done | `lws-core/src/config.rs` |
+| User RPC overrides via config | Done | Merge semantics |
+| RPC resolution order (flag > config > default) | Done | CLI + config |
+| `lws config show` command | Done | Shows endpoints with (default)/(custom) |
+| `buildTransaction()` method on plugins | Not started | Expects pre-built tx bytes |
+| `broadcast()` on `ChainSigner` trait | Not started | Broadcasting is in CLI, not trait |
+| External plugin discovery (npm `lws-plugin` keyword) | Not started | Chains are hardcoded in `signer_for_chain()` |
+| Plugin loading from `~/.lws/config.json` plugins field | Not started | Config field exists but unused |
+| Multi-chain account derivation from single mnemonic | Done | `derive_all_accounts()` |
+
 ## Design Decision
 
 **LWS uses a chain plugin system where each supported chain provides a signer and transaction builder that implement a standard interface. New chains are added by writing a plugin — no changes to the core spec or implementation are needed.**

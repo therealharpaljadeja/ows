@@ -2,6 +2,29 @@
 
 > The core operations exposed by an LWS implementation: signing, sending, and message signing.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `sign` (sign transaction) | Done | CLI `lws sign tx`, `lws-signer` trait |
+| `signAndSend` (sign + broadcast) | Done | CLI `lws sign send-tx`, per-chain broadcast |
+| `signMessage` (arbitrary message signing) | Done | CLI `lws sign message`, EIP-712 supported |
+| EVM broadcast (`eth_sendRawTransaction`) | Done | `send_transaction.rs` |
+| Solana broadcast (`sendTransaction`) | Done | `send_transaction.rs` |
+| Bitcoin broadcast (mempool.space REST) | Done | `send_transaction.rs` |
+| Cosmos broadcast (`/cosmos/tx/v1beta1/txs`) | Done | `send_transaction.rs` |
+| Tron broadcast (`/wallet/broadcasthex`) | Done | `send_transaction.rs` |
+| Error code: `WALLET_NOT_FOUND` | Done | `lws-core/src/error.rs` |
+| Error code: `CHAIN_NOT_SUPPORTED` | Done | `lws-core/src/error.rs` |
+| Error code: `INVALID_PASSPHRASE` | Done | `lws-core/src/error.rs` |
+| Error code: `POLICY_DENIED` | Not started | No policy engine |
+| Error code: `INSUFFICIENT_FUNDS` | Not started | |
+| Error code: `VAULT_LOCKED` | Not started | No session/lock concept |
+| Error code: `BROADCAST_FAILED` | Not started | |
+| Error code: `TIMEOUT` | Not started | |
+| Concurrency (per-wallet mutex / nonce manager) | Not started | No concurrency controls |
+| Caller authentication (owner vs agent) | Not started | No two-tier access model |
+
 ## Design Decision
 
 **LWS defines a minimal, chain-agnostic interface with three core operations (`sign`, `signAndSend`, `signMessage`) that accept serialized chain-specific data and return chain-specific results. The interface never exposes private keys.**
