@@ -1,6 +1,6 @@
 {
   "name": "@local-wallet-standard/node-linux-arm64-gnu",
-  "version": "0.2.22",
+  "version": "0.2.23",
   "os": [
     "linux"
   ],
