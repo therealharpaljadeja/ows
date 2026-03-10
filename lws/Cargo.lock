@@ -782,7 +782,6 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
- "getrandom 0.2.17",
  "hex",
  "lws-core",
  "lws-lib",
@@ -792,7 +791,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
- "uuid",
  "zeroize",
 ]
 

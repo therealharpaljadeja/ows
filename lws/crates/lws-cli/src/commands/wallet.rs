@@ -1,51 +1,19 @@
 use std::io::IsTerminal;
 
-use lws_core::{default_chain_for_type, EncryptedWallet, KeyType, WalletAccount, ALL_CHAIN_TYPES};
-use lws_signer::{
-    decrypt, encrypt, signer_for_chain, CryptoEnvelope, HdDeriver, Mnemonic, MnemonicStrength,
-};
-
 use crate::audit;
-use crate::vault;
 use crate::CliError;
 
 pub fn create(name: &str, words: u32, show_mnemonic: bool) -> Result<(), CliError> {
-    let strength = match words {
-        12 => MnemonicStrength::Words12,
-        24 => MnemonicStrength::Words24,
-        _ => return Err(CliError::InvalidArgs("--words must be 12 or 24".into())),
-    };
+    // Generate mnemonic, then import it to create the wallet
+    let mnemonic_phrase = lws_lib::generate_mnemonic(words)?;
+    let info = lws_lib::import_wallet_mnemonic(name, &mnemonic_phrase, None, Some(0), None)?;
 
-    // Generate mnemonic
-    let mnemonic = Mnemonic::generate(strength)?;
+    audit::log_wallet_created(&info);
 
-    // Derive addresses for all chains
-    let accounts = derive_all_accounts_from_mnemonic(&mnemonic, 0)?;
-
-    // Encrypt the mnemonic entropy
-    let phrase = mnemonic.phrase();
-    let crypto_envelope = encrypt(phrase.expose(), "")?;
-    let crypto_json = serde_json::to_value(&crypto_envelope)?;
-
-    let wallet_id = uuid::Uuid::new_v4().to_string();
-
-    let wallet = EncryptedWallet::new(
-        wallet_id.clone(),
-        name.to_string(),
-        accounts.clone(),
-        crypto_json,
-        KeyType::Mnemonic,
-    );
-
-    vault::save_encrypted_wallet(&wallet)?;
-
-    // Audit log — log all accounts
-    audit::log_wallet_created(&wallet_id, &accounts);
-
-    println!("Wallet created: {wallet_id}");
+    println!("Wallet created: {}", info.id);
     println!("Name:           {name}");
     println!();
-    for acct in &accounts {
+    for acct in &info.accounts {
         println!("  {} → {}", acct.chain_id, acct.address);
         if !acct.derivation_path.is_empty() {
             println!("    Path: {}", acct.derivation_path);
@@ -53,13 +21,11 @@ pub fn create(name: &str, words: u32, show_mnemonic: bool) -> Result<(), CliErro
     }
 
     if show_mnemonic {
-        let phrase_str = String::from_utf8(phrase.expose().to_vec())
-            .map_err(|e| CliError::InvalidArgs(format!("invalid UTF-8 in mnemonic: {e}")))?;
         eprintln!();
         eprintln!("⚠️  WARNING: The mnemonic below provides FULL ACCESS to this wallet.");
         eprintln!("⚠️  Store it securely offline. It will NOT be shown again.");
         eprintln!();
-        println!("{phrase_str}");
+        println!("{mnemonic_phrase}");
     } else {
         eprintln!();
         eprintln!("Mnemonic encrypted and saved to vault.");
@@ -93,92 +59,33 @@ pub fn import(
         ));
     }
 
-    let (accounts, secret_bytes, key_type) = if use_mnemonic {
+    let info = if use_mnemonic {
         let phrase = super::read_mnemonic()?;
-        let mnemonic = Mnemonic::from_phrase(&phrase)?;
-        let accts = derive_all_accounts_from_mnemonic(&mnemonic, index)?;
-        let phrase_bytes = mnemonic.phrase();
-        (accts, phrase_bytes.expose().to_vec(), KeyType::Mnemonic)
+        lws_lib::import_wallet_mnemonic(name, &phrase, None, Some(index), None)?
     } else {
-        let decode_hex = |s: &str| -> Result<Vec<u8>, CliError> {
-            let trimmed = s.strip_prefix("0x").unwrap_or(s);
-            hex::decode(trimmed)
-                .map_err(|e| CliError::InvalidArgs(format!("invalid hex private key: {e}")))
-        };
-
-        let keys = if both_curve_keys {
-            // Both curve keys provided explicitly
-            let secp = decode_hex(secp256k1_key.unwrap())?;
-            let ed = decode_hex(ed25519_key.unwrap())?;
-            (secp, ed)
+        // Read from stdin only when both curve keys are not already provided
+        let private_key_hex = if both_curve_keys {
+            String::new()
         } else {
-            // Single key from stdin/env, optionally with one curve key override
-            let hex_key = super::read_private_key()?;
-            let key_bytes = decode_hex(&hex_key)?;
-
-            // Determine curve from source chain (default: secp256k1)
-            let source_curve = match chain {
-                Some(c) => {
-                    let parsed = lws_core::parse_chain(c).map_err(CliError::InvalidArgs)?;
-                    signer_for_chain(parsed.chain_type).curve()
-                }
-                None => lws_signer::Curve::Secp256k1,
-            };
-
-            // Generate random key for the other curve (may be overridden)
-            let mut random_key = vec![0u8; 32];
-            getrandom::getrandom(&mut random_key).map_err(|e| {
-                CliError::InvalidArgs(format!("failed to generate random key: {e}"))
-            })?;
-
-            match source_curve {
-                lws_signer::Curve::Secp256k1 => {
-                    let ed = ed25519_key
-                        .map(decode_hex)
-                        .transpose()?
-                        .unwrap_or(random_key);
-                    (key_bytes, ed)
-                }
-                lws_signer::Curve::Ed25519 => {
-                    let secp = secp256k1_key
-                        .map(decode_hex)
-                        .transpose()?
-                        .unwrap_or(random_key);
-                    (secp, key_bytes)
-                }
-            }
+            super::read_private_key()?
         };
-
-        let payload = serde_json::json!({
-            "secp256k1": hex::encode(&keys.0),
-            "ed25519": hex::encode(&keys.1),
-        })
-        .to_string()
-        .into_bytes();
-        let accts = derive_all_accounts_from_keys(&keys.0, &keys.1)?;
-        (accts, payload, KeyType::PrivateKey)
+        lws_lib::import_wallet_private_key(
+            name,
+            &private_key_hex,
+            chain,
+            None,
+            None,
+            secp256k1_key,
+            ed25519_key,
+        )?
     };
 
-    let crypto_envelope = encrypt(&secret_bytes, "")?;
-    let crypto_json = serde_json::to_value(&crypto_envelope)?;
+    audit::log_wallet_imported(&info);
 
-    let wallet_id = uuid::Uuid::new_v4().to_string();
-
-    let wallet = EncryptedWallet::new(
-        wallet_id.clone(),
-        name.to_string(),
-        accounts.clone(),
-        crypto_json,
-        key_type,
-    );
-
-    vault::save_encrypted_wallet(&wallet)?;
-    audit::log_wallet_imported(&wallet_id, &accounts);
-
-    println!("Wallet imported: {wallet_id}");
+    println!("Wallet imported: {}", info.id);
     println!("Name:            {name}");
     println!();
-    for acct in &accounts {
+    for acct in &info.accounts {
         println!("  {} → {}", acct.chain_id, acct.address);
         if !acct.derivation_path.is_empty() {
             println!("    Path: {}", acct.derivation_path);
@@ -195,39 +102,28 @@ pub fn export(wallet_name: &str) -> Result<(), CliError> {
         ));
     }
 
-    let wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
-    let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-
     // Try empty passphrase first, then prompt if it fails
-    let secret = match decrypt(&envelope, "") {
+    let exported = match lws_lib::export_wallet(wallet_name, None, None) {
         Ok(s) => s,
         Err(_) => {
             let passphrase = super::read_passphrase();
-            decrypt(&envelope, &passphrase)?
+            lws_lib::export_wallet(wallet_name, Some(&passphrase), None)?
         }
     };
 
-    match wallet.key_type {
-        KeyType::Mnemonic => {
-            let phrase = String::from_utf8(secret.expose().to_vec())
-                .map_err(|_| CliError::InvalidArgs("wallet contains invalid mnemonic".into()))?;
-            eprintln!();
-            eprintln!("WARNING: The mnemonic below provides FULL ACCESS to this wallet.");
-            eprintln!("Do not share it. Store it securely offline.");
-            eprintln!();
-            println!("{phrase}");
-        }
-        KeyType::PrivateKey => {
-            let hex_key = hex::encode(secret.expose());
-            eprintln!();
-            eprintln!("WARNING: The private key below provides FULL ACCESS to this wallet.");
-            eprintln!("Do not share it. Store it securely offline.");
-            eprintln!();
-            println!("{hex_key}");
-        }
+    let is_key_pair = exported.starts_with('{');
+    eprintln!();
+    if is_key_pair {
+        eprintln!("WARNING: The private key below provides FULL ACCESS to this wallet.");
+    } else {
+        eprintln!("WARNING: The mnemonic below provides FULL ACCESS to this wallet.");
     }
+    eprintln!("Do not share it. Store it securely offline.");
+    eprintln!();
+    println!("{exported}");
 
-    audit::log_wallet_exported(&wallet.id);
+    let info = lws_lib::get_wallet(wallet_name, None)?;
+    audit::log_wallet_exported(&info.id);
     Ok(())
 }
 
@@ -240,41 +136,25 @@ pub fn delete(wallet_name: &str, confirm: bool) -> Result<(), CliError> {
         ));
     }
 
-    let wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
-    let id = wallet.id.clone();
-    let name = wallet.name.clone();
+    let info = lws_lib::get_wallet(wallet_name, None)?;
+    lws_lib::delete_wallet(wallet_name, None)?;
+    audit::log_wallet_deleted(&info.id, &info.name);
 
-    vault::delete_wallet(&id)?;
-    audit::log_wallet_deleted(&id, &name);
-
-    println!("Wallet deleted: {id} ({name})");
+    println!("Wallet deleted: {} ({})", info.id, info.name);
     Ok(())
 }
 
 pub fn rename(wallet_name: &str, new_name: &str) -> Result<(), CliError> {
-    let mut wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
+    let info = lws_lib::get_wallet(wallet_name, None)?;
+    lws_lib::rename_wallet(wallet_name, new_name, None)?;
+    audit::log_wallet_renamed(&info.id, &info.name, new_name);
 
-    if wallet.name == new_name {
-        return Ok(());
-    }
-
-    if vault::wallet_name_exists(new_name)? {
-        return Err(CliError::InvalidArgs(format!(
-            "a wallet named '{new_name}' already exists"
-        )));
-    }
-
-    let old_name = wallet.name.clone();
-    wallet.name = new_name.to_string();
-    vault::save_encrypted_wallet(&wallet)?;
-    audit::log_wallet_renamed(&wallet.id, &old_name, new_name);
-
-    println!("Wallet renamed: '{}' -> '{}'", old_name, new_name);
+    println!("Wallet renamed: '{}' -> '{}'", info.name, new_name);
     Ok(())
 }
 
 pub fn list() -> Result<(), CliError> {
-    let wallets = vault::list_encrypted_wallets()?;
+    let wallets = lws_lib::list_wallets(None)?;
 
     if wallets.is_empty() {
         println!("No wallets found.");
@@ -293,52 +173,4 @@ pub fn list() -> Result<(), CliError> {
     }
 
     Ok(())
-}
-
-// --- helpers ---
-
-fn derive_all_accounts_from_mnemonic(
-    mnemonic: &Mnemonic,
-    index: u32,
-) -> Result<Vec<WalletAccount>, CliError> {
-    let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
-    for ct in &ALL_CHAIN_TYPES {
-        let chain = default_chain_for_type(*ct);
-        let signer = signer_for_chain(*ct);
-        let path = signer.default_derivation_path(index);
-        let curve = signer.curve();
-        let key = HdDeriver::derive_from_mnemonic(mnemonic, "", &path, curve)?;
-        let address = signer.derive_address(key.expose())?;
-        let account_id = format!("{}:{}", chain.chain_id, address);
-        accounts.push(WalletAccount {
-            account_id,
-            address,
-            chain_id: chain.chain_id.to_string(),
-            derivation_path: path,
-        });
-    }
-    Ok(accounts)
-}
-
-fn derive_all_accounts_from_keys(
-    secp256k1_key: &[u8],
-    ed25519_key: &[u8],
-) -> Result<Vec<WalletAccount>, CliError> {
-    let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
-    for ct in &ALL_CHAIN_TYPES {
-        let signer = signer_for_chain(*ct);
-        let key = match signer.curve() {
-            lws_signer::Curve::Secp256k1 => secp256k1_key,
-            lws_signer::Curve::Ed25519 => ed25519_key,
-        };
-        let chain = default_chain_for_type(*ct);
-        let address = signer.derive_address(key)?;
-        accounts.push(WalletAccount {
-            account_id: format!("{}:{}", chain.chain_id, address),
-            address,
-            chain_id: chain.chain_id.to_string(),
-            derivation_path: String::new(),
-        });
-    }
-    Ok(accounts)
 }

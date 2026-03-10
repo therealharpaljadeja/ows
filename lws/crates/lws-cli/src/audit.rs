@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use lws_core::{Config, WalletAccount};
+use lws_core::Config;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 
@@ -65,23 +65,25 @@ pub fn log_wallet_event(
 }
 
 /// Convenience: log a wallet creation event with all accounts.
-pub fn log_wallet_created(wallet_id: &str, accounts: &[WalletAccount]) {
-    let details = accounts
+pub fn log_wallet_created(info: &lws_lib::WalletInfo) {
+    let details = info
+        .accounts
         .iter()
         .map(|a| format!("{}={}", a.chain_id, a.address))
         .collect::<Vec<_>>()
         .join(", ");
-    log_wallet_event(wallet_id, "create_wallet", None, None, Some(details));
+    log_wallet_event(&info.id, "create_wallet", None, None, Some(details));
 }
 
 /// Convenience: log a wallet import event with all accounts.
-pub fn log_wallet_imported(wallet_id: &str, accounts: &[WalletAccount]) {
-    let details = accounts
+pub fn log_wallet_imported(info: &lws_lib::WalletInfo) {
+    let details = info
+        .accounts
         .iter()
         .map(|a| format!("{}={}", a.chain_id, a.address))
         .collect::<Vec<_>>()
         .join(", ");
-    log_wallet_event(wallet_id, "import_wallet", None, None, Some(details));
+    log_wallet_event(&info.id, "import_wallet", None, None, Some(details));
 }
 
 /// Convenience: log a wallet export event.

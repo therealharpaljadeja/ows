@@ -21,6 +21,4 @@ thiserror = "2"
 tempfile = "3"
 rpassword = "7"
 serde = { version = "1", features = ["derive"] }
-uuid = { version = "1", features = ["v4"] }
 zeroize = "1"
-getrandom = "0.2"
