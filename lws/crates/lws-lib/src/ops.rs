@@ -1003,17 +1003,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        let info =
-            import_wallet_private_key(
-                "pk-api",
-                TEST_PRIVKEY,
-                Some("evm"),
-                None,
-                Some(vault),
-                None,
-                None,
-            )
-            .unwrap();
+        let info = import_wallet_private_key(
+            "pk-api",
+            TEST_PRIVKEY,
+            Some("evm"),
+            None,
+            Some(vault),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(
             !info.accounts.is_empty(),
             "should derive at least one account"
@@ -1039,8 +1038,8 @@ mod tests {
 
         let info = import_wallet_private_key(
             "pk-both",
-            "",          // ignored when both curve keys provided
-            None,        // chain ignored too
+            "",   // ignored when both curve keys provided
+            None, // chain ignored too
             None,
             Some(vault),
             Some(secp_key),
@@ -1234,18 +1233,16 @@ mod tests {
     #[test]
     fn error_invalid_private_key_hex() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(
-            import_wallet_private_key(
-                "bad",
-                "not-hex",
-                Some("evm"),
-                None,
-                Some(dir.path()),
-                None,
-                None,
-            )
-            .is_err()
-        );
+        assert!(import_wallet_private_key(
+            "bad",
+            "not-hex",
+            Some("evm"),
+            None,
+            Some(dir.path()),
+            None,
+            None,
+        )
+        .is_err());
     }
 
     #[test]

@@ -251,7 +251,10 @@ mod tests {
         // Private key: 9d61b19d... -> Public key: d75a9801...
         let signer = TonSigner;
         let address = signer.derive_address(&test_privkey()).unwrap();
-        assert!(address.starts_with("UQ"), "non-bounceable address should start with UQ, got: {address}");
+        assert!(
+            address.starts_with("UQ"),
+            "non-bounceable address should start with UQ, got: {address}"
+        );
     }
 
     #[test]
