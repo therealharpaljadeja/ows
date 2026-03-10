@@ -60,20 +60,55 @@ fn derive_all_accounts(
     Ok(accounts)
 }
 
-/// Derive accounts for all chain families that share the same curve as the source chain.
-/// A secp256k1 key only gets EVM/Bitcoin/Cosmos/Tron accounts.
-/// An Ed25519 key only gets Solana/TON accounts.
-fn derive_all_accounts_from_key(
-    key_bytes: &[u8],
-    source_curve: lws_signer::Curve,
-) -> Result<Vec<WalletAccount>, LwsLibError> {
+/// A key pair: one key per curve.
+struct KeyPair {
+    secp256k1: Vec<u8>,
+    ed25519: Vec<u8>,
+}
+
+impl KeyPair {
+    /// Get the key for a given curve.
+    fn key_for_curve(&self, curve: lws_signer::Curve) -> &[u8] {
+        match curve {
+            lws_signer::Curve::Secp256k1 => &self.secp256k1,
+            lws_signer::Curve::Ed25519 => &self.ed25519,
+        }
+    }
+
+    /// Serialize to JSON bytes for encryption.
+    fn to_json_bytes(&self) -> Vec<u8> {
+        let obj = serde_json::json!({
+            "secp256k1": hex::encode(&self.secp256k1),
+            "ed25519": hex::encode(&self.ed25519),
+        });
+        obj.to_string().into_bytes()
+    }
+
+    /// Deserialize from JSON bytes after decryption.
+    fn from_json_bytes(bytes: &[u8]) -> Result<Self, LwsLibError> {
+        let s = String::from_utf8(bytes.to_vec())
+            .map_err(|_| LwsLibError::InvalidInput("invalid key pair data".into()))?;
+        let obj: serde_json::Value = serde_json::from_str(&s)?;
+        let secp = obj["secp256k1"].as_str()
+            .ok_or_else(|| LwsLibError::InvalidInput("missing secp256k1 key".into()))?;
+        let ed = obj["ed25519"].as_str()
+            .ok_or_else(|| LwsLibError::InvalidInput("missing ed25519 key".into()))?;
+        Ok(KeyPair {
+            secp256k1: hex::decode(secp)
+                .map_err(|e| LwsLibError::InvalidInput(format!("invalid secp256k1 hex: {e}")))?,
+            ed25519: hex::decode(ed)
+                .map_err(|e| LwsLibError::InvalidInput(format!("invalid ed25519 hex: {e}")))?,
+        })
+    }
+}
+
+/// Derive accounts for all chain families using a key pair (one key per curve).
+fn derive_all_accounts_from_keys(keys: &KeyPair) -> Result<Vec<WalletAccount>, LwsLibError> {
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
         let signer = signer_for_chain(*ct);
-        if signer.curve() != source_curve {
-            continue;
-        }
-        let address = signer.derive_address(key_bytes)?;
+        let key = keys.key_for_curve(signer.curve());
+        let address = signer.derive_address(key)?;
         let chain = default_chain_for_type(*ct);
         accounts.push(WalletAccount {
             account_id: format!("{}:{}", chain.chain_id, address),
@@ -81,11 +116,6 @@ fn derive_all_accounts_from_key(
             chain_id: chain.chain_id.to_string(),
             derivation_path: String::new(),
         });
-    }
-    if accounts.is_empty() {
-        return Err(LwsLibError::InvalidInput(
-            "could not derive address for any chain from this private key".into(),
-        ));
     }
     Ok(accounts)
 }
@@ -200,9 +230,7 @@ pub fn import_wallet_mnemonic(
 
 /// Import a wallet from a hex-encoded private key.
 /// The `chain` parameter specifies which chain the key originates from (e.g. "evm", "solana").
-/// This determines the curve, and accounts are derived only for chains sharing that curve:
-/// - secp256k1 key (evm/bitcoin/cosmos/tron) → EVM, Bitcoin, Cosmos, Tron accounts
-/// - Ed25519 key (solana/ton) → Solana, TON accounts
+/// A random key is generated for the other curve so all 6 chains are supported.
 pub fn import_wallet_private_key(
     name: &str,
     private_key_hex: &str,
@@ -220,7 +248,7 @@ pub fn import_wallet_private_key(
     let key_bytes = hex::decode(hex_trimmed)
         .map_err(|e| LwsLibError::InvalidInput(format!("invalid hex private key: {e}")))?;
 
-    // Determine curve from the source chain (default: secp256k1 for backwards compat)
+    // Determine curve from the source chain (default: secp256k1)
     let source_curve = match chain {
         Some(c) => {
             let parsed = parse_chain(c)?;
@@ -229,9 +257,26 @@ pub fn import_wallet_private_key(
         None => lws_signer::Curve::Secp256k1,
     };
 
-    let accounts = derive_all_accounts_from_key(&key_bytes, source_curve)?;
+    // Build key pair: provided key for its curve, random 32 bytes for the other
+    let mut other_key = vec![0u8; 32];
+    getrandom::getrandom(&mut other_key)
+        .map_err(|e| LwsLibError::InvalidInput(format!("failed to generate random key: {e}")))?;
 
-    let crypto_envelope = encrypt(&key_bytes, passphrase)?;
+    let keys = match source_curve {
+        lws_signer::Curve::Secp256k1 => KeyPair {
+            secp256k1: key_bytes,
+            ed25519: other_key,
+        },
+        lws_signer::Curve::Ed25519 => KeyPair {
+            secp256k1: other_key,
+            ed25519: key_bytes,
+        },
+    };
+
+    let accounts = derive_all_accounts_from_keys(&keys)?;
+
+    let payload = keys.to_json_bytes();
+    let crypto_envelope = encrypt(&payload, passphrase)?;
     let crypto_json = serde_json::to_value(&crypto_envelope)?;
 
     let wallet_id = uuid::Uuid::new_v4().to_string();
@@ -273,7 +318,8 @@ pub fn delete_wallet(
     Ok(())
 }
 
-/// Export a wallet's secret (mnemonic or private key hex).
+/// Export a wallet's secret.
+/// Mnemonic wallets return the phrase. Private key wallets return JSON with both keys.
 pub fn export_wallet(
     name_or_id: &str,
     passphrase: Option<&str>,
@@ -287,7 +333,11 @@ pub fn export_wallet(
     match wallet.key_type {
         KeyType::Mnemonic => String::from_utf8(secret.expose().to_vec())
             .map_err(|_| LwsLibError::InvalidInput("wallet contains invalid UTF-8 mnemonic".into())),
-        KeyType::PrivateKey => Ok(hex::encode(secret.expose())),
+        KeyType::PrivateKey => {
+            // Return the JSON key pair as-is
+            String::from_utf8(secret.expose().to_vec())
+                .map_err(|_| LwsLibError::InvalidInput("wallet contains invalid key data".into()))
+        }
     }
 }
 
@@ -406,7 +456,7 @@ pub fn sign_and_send(
 
 // --- internal helpers ---
 
-/// Decrypt a wallet and derive the private key for the given chain and index.
+/// Decrypt a wallet and return the private key for the given chain.
 fn decrypt_signing_key(
     wallet_name_or_id: &str,
     chain_type: ChainType,
@@ -429,8 +479,10 @@ fn decrypt_signing_key(
             Ok(HdDeriver::derive_from_mnemonic(&mnemonic, "", &path, curve)?)
         }
         KeyType::PrivateKey => {
-            // Raw key bytes — use directly (index is ignored)
-            Ok(secret)
+            // JSON key pair — extract the right key for this chain's curve
+            let keys = KeyPair::from_json_bytes(secret.expose())?;
+            let signer = signer_for_chain(chain_type);
+            Ok(SecretBytes::from_slice(keys.key_for_curve(signer.curve())))
         }
     }
 }

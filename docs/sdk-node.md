@@ -160,11 +160,20 @@ renameWallet("old-name", "new-name");
 
 #### `exportWallet(nameOrId, passphrase?, vaultPath?)`
 
-Export a wallet's secret (mnemonic or private key).
+Export a wallet's secret.
+
+- **Mnemonic wallets** return the phrase string.
+- **Private key wallets** return a JSON string with both curve keys:
 
 ```javascript
-const mnemonic = exportWallet("agent-treasury");
+// Mnemonic wallet
+const phrase = exportWallet("mn-wallet");
 // => "goose puzzle decorate much ..."
+
+// Private key wallet
+const keysJson = exportWallet("pk-wallet");
+const keys = JSON.parse(keysJson);
+// => { secp256k1: "4c0883a6...", ed25519: "9d61b19d..." }
 ```
 
 **Returns:** `string`
@@ -173,7 +182,7 @@ const mnemonic = exportWallet("agent-treasury");
 
 #### `importWalletMnemonic(name, mnemonic, passphrase?, index?, vaultPath?)`
 
-Import a wallet from a BIP-39 mnemonic.
+Import a wallet from a BIP-39 mnemonic. Derives all 6 chain accounts via HD paths.
 
 ```javascript
 const wallet = importWalletMnemonic("imported", "goose puzzle decorate ...");
@@ -181,13 +190,31 @@ const wallet = importWalletMnemonic("imported", "goose puzzle decorate ...");
 
 **Returns:** `WalletInfo`
 
-#### `importWalletPrivateKey(name, privateKeyHex, passphrase?, vaultPath?)`
+#### `importWalletPrivateKey(name, privateKeyHex, passphrase?, vaultPath?, chain?)`
 
-Import a wallet from a hex-encoded private key.
+Import a wallet from a hex-encoded private key. All 6 chains are supported: the provided key is used for its curve's chains, and a random key is generated for the other curve.
+
+The optional `chain` parameter specifies which chain the key originates from to determine the curve. Defaults to `"evm"` (secp256k1).
 
 ```javascript
-const wallet = importWalletPrivateKey("imported", "4c0883a691...");
+// Import an EVM private key — generates a random Ed25519 key for Solana/TON
+const wallet = importWalletPrivateKey("from-evm", "4c0883a691...");
+console.log(wallet.accounts.length); // => 6
+
+// Import a Solana private key — generates a random secp256k1 key for EVM/BTC/etc.
+const wallet2 = importWalletPrivateKey(
+  "from-solana", "9d61b19d...", undefined, undefined, "solana"
+);
+console.log(wallet2.accounts.length); // => 6
 ```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `string` | &mdash; | Wallet name |
+| `privateKeyHex` | `string` | &mdash; | Hex-encoded private key (with or without `0x` prefix) |
+| `passphrase` | `string` | `undefined` | Encryption passphrase |
+| `vaultPath` | `string` | `~/.lws/wallets` | Custom vault directory |
+| `chain` | `string` | `"evm"` | Source chain: `"evm"`, `"bitcoin"`, `"cosmos"`, `"tron"` (secp256k1) or `"solana"`, `"ton"` (Ed25519) |
 
 **Returns:** `WalletInfo`
 

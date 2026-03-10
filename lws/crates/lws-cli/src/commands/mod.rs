@@ -71,10 +71,11 @@ pub fn read_private_key() -> Result<String, CliError> {
     Ok(trimmed)
 }
 
-/// Resolved wallet secret — either a mnemonic phrase or raw private key bytes.
+/// Resolved wallet secret — either a mnemonic phrase or a key pair (JSON).
 pub enum WalletSecret {
     Mnemonic(String),
-    PrivateKey(SecretBytes),
+    /// JSON key pair: `{"secp256k1":"hex","ed25519":"hex"}`
+    PrivateKeys(SecretBytes),
 }
 
 /// Read a passphrase from LWS_PASSPHRASE env var or prompt interactively.
@@ -115,6 +116,6 @@ pub fn resolve_wallet_secret(wallet_name: &str) -> Result<WalletSecret, CliError
                 .map_err(|_| CliError::InvalidArgs("wallet contains invalid mnemonic".into()))?;
             Ok(WalletSecret::Mnemonic(phrase))
         }
-        KeyType::PrivateKey => Ok(WalletSecret::PrivateKey(secret)),
+        KeyType::PrivateKey => Ok(WalletSecret::PrivateKeys(secret)),
     }
 }

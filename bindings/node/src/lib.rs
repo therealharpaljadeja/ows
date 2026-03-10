@@ -114,16 +114,17 @@ pub fn import_wallet_mnemonic(
 }
 
 /// Import a wallet from a hex-encoded private key.
-/// The `chain` parameter specifies the key's source chain (e.g. "evm", "solana")
-/// to determine which curve it uses. Accounts are derived only for chains sharing that curve.
-/// Defaults to "evm" (secp256k1) if not specified.
+/// All 6 chains are supported: the provided key is used for its curve's chains,
+/// and a random key is generated for the other curve.
+/// The optional `chain` parameter specifies the key's source chain (e.g. "evm", "solana")
+/// to determine which curve it uses. Defaults to "evm" (secp256k1).
 #[napi]
 pub fn import_wallet_private_key(
     name: String,
     private_key_hex: String,
-    chain: Option<String>,
     passphrase: Option<String>,
     vault_path_opt: Option<String>,
+    chain: Option<String>,
 ) -> Result<WalletInfo> {
     lws_lib::import_wallet_private_key(
         &name,

@@ -139,29 +139,57 @@ rename_wallet("old-name", "new-name")
 
 #### `export_wallet(name_or_id, passphrase=None, vault_path=None)`
 
-Export a wallet's secret (mnemonic or private key).
+Export a wallet's secret.
+
+- **Mnemonic wallets** return the phrase string.
+- **Private key wallets** return a JSON string with both curve keys.
 
 ```python
-mnemonic = export_wallet("agent-treasury")
+# Mnemonic wallet
+phrase = export_wallet("mn-wallet")
+# => "goose puzzle decorate much ..."
+
+# Private key wallet
+import json
+keys = json.loads(export_wallet("pk-wallet"))
+# => {"secp256k1": "4c0883a6...", "ed25519": "9d61b19d..."}
 ```
 
 ### Import
 
 #### `import_wallet_mnemonic(name, mnemonic, passphrase=None, index=None, vault_path=None)`
 
-Import a wallet from a BIP-39 mnemonic.
+Import a wallet from a BIP-39 mnemonic. Derives all 6 chain accounts via HD paths.
 
 ```python
 wallet = import_wallet_mnemonic("imported", "goose puzzle decorate ...")
 ```
 
-#### `import_wallet_private_key(name, private_key_hex, passphrase=None, vault_path=None)`
+#### `import_wallet_private_key(name, private_key_hex, passphrase=None, vault_path=None, chain=None)`
 
-Import a wallet from a hex-encoded private key.
+Import a wallet from a hex-encoded private key. All 6 chains are supported: the provided key is used for its curve's chains, and a random key is generated for the other curve.
+
+The optional `chain` parameter specifies which chain the key originates from to determine the curve. Defaults to `"evm"` (secp256k1).
 
 ```python
-wallet = import_wallet_private_key("imported", "4c0883a691...")
+# Import an EVM private key — generates a random Ed25519 key for Solana/TON
+wallet = import_wallet_private_key("from-evm", "4c0883a691...")
+print(len(wallet["accounts"]))  # => 6
+
+# Import a Solana private key — generates a random secp256k1 key for EVM/BTC/etc.
+wallet = import_wallet_private_key(
+    "from-solana", "9d61b19d...", chain="solana"
+)
+print(len(wallet["accounts"]))  # => 6
 ```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `str` | &mdash; | Wallet name |
+| `private_key_hex` | `str` | &mdash; | Hex-encoded private key |
+| `passphrase` | `str` | `None` | Encryption passphrase |
+| `vault_path` | `str` | `None` | Custom vault directory |
+| `chain` | `str` | `"evm"` | Source chain: `"evm"`, `"bitcoin"`, `"cosmos"`, `"tron"` (secp256k1) or `"solana"`, `"ton"` (Ed25519) |
 
 ### Signing
 

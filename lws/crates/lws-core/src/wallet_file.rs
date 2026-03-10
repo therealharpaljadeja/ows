@@ -33,6 +33,8 @@ pub struct WalletAccount {
 #[serde(rename_all = "snake_case")]
 pub enum KeyType {
     Mnemonic,
+    /// Multi-curve key pair: encrypted JSON `{"secp256k1":"hex","ed25519":"hex"}`.
+    /// Supports all 6 chains.
     PrivateKey,
 }
 

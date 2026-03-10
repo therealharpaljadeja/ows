@@ -1,5 +1,5 @@
 use lws_signer::chains::EvmSigner;
-use lws_signer::{signer_for_chain, HdDeriver, Mnemonic};
+use lws_signer::{signer_for_chain, HdDeriver, Mnemonic, SecretBytes};
 
 use super::WalletSecret;
 use crate::{parse_chain, CliError};
@@ -25,7 +25,9 @@ pub fn run(
             let curve = signer.curve();
             HdDeriver::derive_from_mnemonic_cached(&mnemonic, "", &path, curve)?
         }
-        WalletSecret::PrivateKey(secret) => secret,
+        WalletSecret::PrivateKeys(secret) => {
+            extract_key_for_curve(secret.expose(), signer.curve())?
+        }
     };
 
     let output = if let Some(td_json) = typed_data {
@@ -60,4 +62,22 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn extract_key_for_curve(
+    json_bytes: &[u8],
+    curve: lws_signer::Curve,
+) -> Result<SecretBytes, CliError> {
+    let s = String::from_utf8(json_bytes.to_vec())
+        .map_err(|_| CliError::InvalidArgs("invalid key data".into()))?;
+    let obj: serde_json::Value = serde_json::from_str(&s)?;
+    let field = match curve {
+        lws_signer::Curve::Secp256k1 => "secp256k1",
+        lws_signer::Curve::Ed25519 => "ed25519",
+    };
+    let hex_key = obj[field].as_str()
+        .ok_or_else(|| CliError::InvalidArgs(format!("missing {field} key in wallet")))?;
+    let bytes = hex::decode(hex_key)
+        .map_err(|e| CliError::InvalidArgs(format!("invalid {field} hex: {e}")))?;
+    Ok(SecretBytes::from_slice(&bytes))
 }

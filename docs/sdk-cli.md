@@ -43,6 +43,44 @@ Created wallet 3198bc9c-...
   tron:mainnet                           TKLm...    m/44'/195'/0'/0/0
 ```
 
+### `lws wallet import`
+
+Import an existing wallet from a mnemonic or private key.
+
+```bash
+# Import from mnemonic (reads from LWS_MNEMONIC env or stdin)
+echo "goose puzzle decorate ..." | lws wallet import --name "imported" --mnemonic
+
+# Import from private key (reads from LWS_PRIVATE_KEY env or stdin)
+echo "4c0883a691..." | lws wallet import --name "from-evm" --private-key
+
+# Import an Ed25519 key (e.g. from Solana)
+echo "9d61b19d..." | lws wallet import --name "from-sol" --private-key --chain solana
+```
+
+| Flag | Description |
+|------|-------------|
+| `--name <NAME>` | Wallet name (required) |
+| `--mnemonic` | Import a mnemonic phrase |
+| `--private-key` | Import a raw private key |
+| `--chain <CHAIN>` | Source chain for private key import (determines curve, default: evm) |
+| `--index <N>` | Account index for HD derivation (mnemonic only, default: 0) |
+
+Private key imports generate all 6 chain accounts: the provided key is used for its curve's chains, and a random key is generated for the other curve.
+
+### `lws wallet export`
+
+Export a wallet's secret to stdout. Requires an interactive terminal.
+
+```bash
+lws wallet export --wallet "my-wallet"
+```
+
+- Mnemonic wallets output the phrase.
+- Private key wallets output JSON: `{"secp256k1":"hex...","ed25519":"hex..."}`.
+
+If the wallet is passphrase-protected, you will be prompted.
+
 ### `lws wallet list`
 
 List all wallets in the vault.

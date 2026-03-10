@@ -716,6 +716,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "getrandom 0.2.17",
  "hex",
  "lws-core",
  "lws-signer",
@@ -727,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "lws-node"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "lws-lib",
  "napi",

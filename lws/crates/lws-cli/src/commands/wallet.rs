@@ -104,8 +104,20 @@ pub fn import(
             }
             None => lws_signer::Curve::Secp256k1,
         };
-        let accts = derive_all_accounts_from_key(&key_bytes, source_curve)?;
-        (accts, key_bytes, KeyType::PrivateKey)
+        // Generate random key for the other curve
+        let mut other_key = vec![0u8; 32];
+        getrandom::getrandom(&mut other_key)
+            .map_err(|e| CliError::InvalidArgs(format!("failed to generate random key: {e}")))?;
+        let keys = match source_curve {
+            lws_signer::Curve::Secp256k1 => (key_bytes, other_key),
+            lws_signer::Curve::Ed25519 => (other_key, key_bytes),
+        };
+        let payload = serde_json::json!({
+            "secp256k1": hex::encode(&keys.0),
+            "ed25519": hex::encode(&keys.1),
+        }).to_string().into_bytes();
+        let accts = derive_all_accounts_from_keys(&keys.0, &keys.1)?;
+        (accts, payload, KeyType::PrivateKey)
     };
 
     let crypto_envelope = encrypt(&secret_bytes, "")?;
@@ -269,18 +281,19 @@ fn derive_all_accounts_from_mnemonic(
     Ok(accounts)
 }
 
-fn derive_all_accounts_from_key(
-    key_bytes: &[u8],
-    source_curve: lws_signer::Curve,
+fn derive_all_accounts_from_keys(
+    secp256k1_key: &[u8],
+    ed25519_key: &[u8],
 ) -> Result<Vec<WalletAccount>, CliError> {
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
         let signer = signer_for_chain(*ct);
-        if signer.curve() != source_curve {
-            continue;
-        }
+        let key = match signer.curve() {
+            lws_signer::Curve::Secp256k1 => secp256k1_key,
+            lws_signer::Curve::Ed25519 => ed25519_key,
+        };
         let chain = default_chain_for_type(*ct);
-        let address = signer.derive_address(key_bytes)?;
+        let address = signer.derive_address(key)?;
         accounts.push(WalletAccount {
             account_id: format!("{}:{}", chain.chain_id, address),
             address,
