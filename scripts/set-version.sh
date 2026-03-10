@@ -43,9 +43,15 @@ set_node_version() {
     package.json > tmp.json && mv tmp.json package.json
 }
 
+set_skill_version() {
+  sed -i.bak "s/^version: .*/version: $VERSION/" \
+    "$REPO_ROOT/skills/lws/SKILL.md"
+  rm -f "$REPO_ROOT/skills/lws/SKILL.md.bak"
+}
+
 case "$SCOPE" in
   --python) set_python_version ;;
   --node)   set_node_version ;;
-  --all)    set_python_version; set_node_version ;;
+  --all)    set_python_version; set_node_version; set_skill_version ;;
   *) usage ;;
 esac
