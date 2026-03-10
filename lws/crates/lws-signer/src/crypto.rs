@@ -43,11 +43,17 @@ pub enum CryptoError {
     InvalidParams(String),
 }
 
-const KDF_N: u32 = 262_144;
+// Production: log_n=16 (~5s per call, down from ~20s at log_n=18)
+// Tests: log_n=10 (<10ms per call)
+#[cfg(any(test, feature = "fast-kdf"))]
+const KDF_LOG_N: u8 = 10;
+#[cfg(not(any(test, feature = "fast-kdf")))]
+const KDF_LOG_N: u8 = 16;
+
+const KDF_N: u32 = 1 << (KDF_LOG_N as u32);
 const KDF_R: u32 = 8;
 const KDF_P: u32 = 1;
 const KDF_DKLEN: u32 = 32;
-const KDF_LOG_N: u8 = 18;
 
 /// Encrypt plaintext bytes using a passphrase (scrypt KDF + AES-256-GCM).
 /// Returns a CryptoEnvelope suitable for JSON serialization.

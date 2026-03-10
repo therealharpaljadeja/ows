@@ -22,3 +22,6 @@ tempfile = "3"
 rpassword = "7"
 serde = { version = "1", features = ["derive"] }
 zeroize = "1"
+
+[dev-dependencies]
+lws-signer = { path = "../lws-signer", features = ["fast-kdf"] }

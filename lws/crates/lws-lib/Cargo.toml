@@ -21,3 +21,4 @@ zeroize = "1"
 tempfile = "3"
 sha3 = "0.10"
 k256 = { version = "0.13", features = ["ecdsa"] }
+lws-signer = { path = "../lws-signer", features = ["fast-kdf"] }

@@ -3,6 +3,10 @@ name = "lws-signer"
 version = "0.2.0"
 edition = "2021"
 
+[features]
+default = []
+fast-kdf = []
+
 [dependencies]
 lws-core = { path = "../lws-core" }
 k256 = { version = "0.13", features = ["ecdsa", "arithmetic"] }
