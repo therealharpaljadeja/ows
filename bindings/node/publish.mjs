@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Publishes @open-wallet-standard/node packages to npm.
+ * Publishes @open-wallet-standard/core packages to npm.
  *
  * Builds the native module for the current platform, copies the binary
  * into the right npm/<platform> directory, and publishes both the

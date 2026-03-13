@@ -311,7 +311,7 @@
           <button class="code-block-copy" onclick="copyCode(this)">Copy</button>
         </div>
         <div class="code-block">
-<pre>npm install @open-wallet-standard/node</pre>
+<pre>npm install @open-wallet-standard/core</pre>
         </div>
       </div>
       <div class="code-block-wrapper" style="max-width: 100%;">
@@ -329,12 +329,12 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
       <div class="code-block-wrapper" style="max-width: 100%;">
         <div class="code-block-header">
-          <span class="code-block-title">Node.js &mdash; <a href="https://www.npmjs.com/package/@open-wallet-standard/node" style="color: var(--gray-400); text-decoration: underline;">npm</a></span>
+          <span class="code-block-title">Node.js &mdash; <a href="https://www.npmjs.com/package/@open-wallet-standard/core" style="color: var(--gray-400); text-decoration: underline;">npm</a></span>
           <button class="code-block-copy" onclick="copyCode(this)">Copy</button>
         </div>
         <div class="code-block">
 <pre><span class="keyword">import</span> { createWallet, signMessage }
-  <span class="keyword">from</span> <span class="string">"@open-wallet-standard/node"</span>;
+  <span class="keyword">from</span> <span class="string">"@open-wallet-standard/core"</span>;
 
 <span class="keyword">const</span> wallet = createWallet(<span class="string">"agent-treasury"</span>);
 <span class="comment">// => accounts for EVM, Solana, BTC, Cosmos, Tron, TON</span>
@@ -674,7 +674,7 @@ ows sign tx --wallet agent-treasury --chain evm --tx-hex <span class="string">"d
       </div>
       <div class="footer-col">
         <h4>Packages</h4>
-        <a href="https://www.npmjs.com/package/@open-wallet-standard/node">npm (Node.js)</a>
+        <a href="https://www.npmjs.com/package/@open-wallet-standard/core">npm (Node.js)</a>
         <a href="https://pypi.org/project/open-wallet-standard/">PyPI (Python)</a>
         <a href="https://github.com/open-wallet-standard/core">GitHub</a>
       </div>

@@ -214,16 +214,16 @@ install_node_bindings() {
   info "Installing Node bindings..."
 
   # Try installing from npm registry first
-  if npm install -g @open-wallet-standard/node 2>/dev/null; then
+  if npm install -g @open-wallet-standard/core 2>/dev/null; then
     # Verify the package is usable (index.js must exist in the global install)
     local pkg_dir
-    pkg_dir="$(npm root -g)/@open-wallet-standard/node"
+    pkg_dir="$(npm root -g)/@open-wallet-standard/core"
     if [ -f "$pkg_dir/index.js" ]; then
       info "Node bindings installed successfully"
       return
     fi
     warn "npm package is incomplete — building from source"
-    npm uninstall -g @open-wallet-standard/node 2>/dev/null || true
+    npm uninstall -g @open-wallet-standard/core 2>/dev/null || true
   fi
 
   # Fallback: build from source

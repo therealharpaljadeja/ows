@@ -1,5 +1,5 @@
 {
-  "name": "@open-wallet-standard/node-darwin-arm64",
+  "name": "@open-wallet-standard/core-darwin-arm64",
   "version": "0.2.27",
   "os": [
     "darwin"

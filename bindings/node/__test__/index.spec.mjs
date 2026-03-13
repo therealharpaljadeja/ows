@@ -19,7 +19,7 @@ import {
   signMessage,
 } from '../index.js';
 
-describe('@open-wallet-standard/node', () => {
+describe('@open-wallet-standard/core', () => {
   let vaultDir;
 
   before(() => {

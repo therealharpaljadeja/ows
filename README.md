@@ -3,7 +3,7 @@
 Secure signing and wallet management for every chain. One vault, one interface — keys never leave your machine.
 
 [![CI](https://github.com/open-wallet-standard/core/actions/workflows/ci.yml/badge.svg)](https://github.com/open-wallet-standard/core/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@open-wallet-standard/node)](https://www.npmjs.com/package/@open-wallet-standard/node)
+[![npm](https://img.shields.io/npm/v/@open-wallet-standard/core)](https://www.npmjs.com/package/@open-wallet-standard/core)
 [![PyPI](https://img.shields.io/pypi/v/open-wallet-standard)](https://pypi.org/project/open-wallet-standard/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -24,8 +24,8 @@ curl -fsSL https://openwallet.sh/install.sh | bash
 Or install only what you need:
 
 ```bash
-npm install @open-wallet-standard/node    # Node.js SDK
-npm install -g @open-wallet-standard/node # Node.js SDK + CLI (provides `ows` command)
+npm install @open-wallet-standard/core    # Node.js SDK
+npm install -g @open-wallet-standard/core # Node.js SDK + CLI (provides `ows` command)
 pip install open-wallet-standard           # Python
 cd ows && cargo build --workspace --release # From source
 ```
@@ -46,7 +46,7 @@ ows sign tx --wallet agent-treasury --chain evm --tx-hex "deadbeef..."
 ```
 
 ```javascript
-import { createWallet, signMessage } from "@open-wallet-standard/node";
+import { createWallet, signMessage } from "@open-wallet-standard/core";
 
 const wallet = createWallet("agent-treasury");
 // => accounts for EVM, Solana, BTC, Cosmos, Tron, TON

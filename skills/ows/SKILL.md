@@ -16,7 +16,7 @@ metadata:
       - linux
     install:
       - kind: node
-        package: "@open-wallet-standard/node"
+        package: "@open-wallet-standard/core"
         bins: [ows]
         label: Install OWS Node.js SDK + CLI
 ---
@@ -25,7 +25,7 @@ metadata:
 
 Secure, offline-first multi-chain wallet management. Private keys are encrypted at rest (AES-256-GCM, scrypt KDF) and decrypted only inside an isolated signing process — the caller never sees the raw key.
 
-Available as **CLI**, **Node.js SDK** (`@open-wallet-standard/node`), and **Python SDK** (`open-wallet-standard`).
+Available as **CLI**, **Node.js SDK** (`@open-wallet-standard/core`), and **Python SDK** (`open-wallet-standard`).
 
 ## When to use
 
@@ -36,7 +36,7 @@ Use this skill when the user asks to:
 - Sign messages or transactions for EVM, Solana, Bitcoin, Cosmos, Tron, or TON
 - Broadcast signed transactions to a chain
 - Generate BIP-39 mnemonic phrases
-- Work with `@open-wallet-standard/node` or `open-wallet-standard` in code
+- Work with `@open-wallet-standard/core` or `open-wallet-standard` in code
 
 ## Supported Chains
 
@@ -56,7 +56,7 @@ Use this skill when the user asks to:
 curl -fsSL https://openwallet.sh/install.sh | bash
 
 # Node.js SDK (global install also provides the ows CLI)
-npm install @open-wallet-standard/node
+npm install @open-wallet-standard/core
 
 # Python SDK
 pip install open-wallet-standard
@@ -133,12 +133,12 @@ ows config show       # Show config and RPC endpoints
 
 ## Node.js SDK
 
-`npm install @open-wallet-standard/node` — native NAPI bindings, Rust core runs in-process.
+`npm install @open-wallet-standard/core` — native NAPI bindings, Rust core runs in-process.
 
 Quick start:
 
 ```javascript
-import { createWallet, signMessage } from "@open-wallet-standard/node";
+import { createWallet, signMessage } from "@open-wallet-standard/core";
 
 const wallet = createWallet("my-wallet");
 const sig = signMessage("my-wallet", "evm", "hello world");

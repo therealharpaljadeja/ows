@@ -2,12 +2,12 @@
 
 > Native bindings for Node.js via NAPI. No CLI, no server, no subprocess &mdash; the Rust core runs in-process.
 
-[![npm](https://img.shields.io/npm/v/@open-wallet-standard/node)](https://www.npmjs.com/package/@open-wallet-standard/node)
+[![npm](https://img.shields.io/npm/v/@open-wallet-standard/core)](https://www.npmjs.com/package/@open-wallet-standard/core)
 
 ## Install
 
 ```bash
-npm install @open-wallet-standard/node
+npm install @open-wallet-standard/core
 ```
 
 The package includes prebuilt native binaries for macOS (arm64, x64) and Linux (x64, arm64). No Rust toolchain required.
@@ -21,7 +21,7 @@ import {
   listWallets,
   signMessage,
   deleteWallet,
-} from "@open-wallet-standard/node";
+} from "@open-wallet-standard/core";
 
 const mnemonic = generateMnemonic(12);
 const wallet = createWallet("my-wallet");

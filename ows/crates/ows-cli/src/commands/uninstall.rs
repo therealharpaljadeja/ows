@@ -107,13 +107,13 @@ fn uninstall_node_bindings() {
         return;
     }
     let check = Command::new("npm")
-        .args(["list", "-g", "@open-wallet-standard/node"])
+        .args(["list", "-g", "@open-wallet-standard/core"])
         .output();
     if let Ok(output) = check {
         if output.status.success() {
             println!("Removing Node bindings...");
             let _ = Command::new("npm")
-                .args(["uninstall", "-g", "@open-wallet-standard/node"])
+                .args(["uninstall", "-g", "@open-wallet-standard/core"])
                 .status();
         }
     }

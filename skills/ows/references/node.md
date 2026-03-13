@@ -1,7 +1,7 @@
-# Node.js SDK — `@open-wallet-standard/node`
+# Node.js SDK — `@open-wallet-standard/core`
 
 ```bash
-npm install @open-wallet-standard/node
+npm install @open-wallet-standard/core
 ```
 
 Native NAPI bindings — Rust core runs in-process, no subprocess or server.
@@ -35,7 +35,7 @@ interface SendResult {
 ## Mnemonic
 
 ```javascript
-import { generateMnemonic, deriveAddress } from "@open-wallet-standard/node";
+import { generateMnemonic, deriveAddress } from "@open-wallet-standard/core";
 
 const phrase = generateMnemonic(12);       // or 24
 const addr = deriveAddress(phrase, "evm"); // any chain: evm, solana, bitcoin, cosmos, tron, ton
@@ -53,7 +53,7 @@ import {
   deleteWallet,
   renameWallet,
   exportWallet,
-} from "@open-wallet-standard/node";
+} from "@open-wallet-standard/core";
 
 // Create
 const wallet = createWallet("my-wallet");
@@ -85,7 +85,7 @@ const secret = exportWallet("my-wallet"); // exportWallet(nameOrId, passphrase?,
 ## Signing
 
 ```javascript
-import { signMessage, signTransaction, signAndSend } from "@open-wallet-standard/node";
+import { signMessage, signTransaction, signAndSend } from "@open-wallet-standard/core";
 
 // Sign message
 const sig = signMessage("my-wallet", "evm", "hello world");

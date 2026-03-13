@@ -1,5 +1,5 @@
 {
-  "name": "@open-wallet-standard/node-linux-x64-gnu",
+  "name": "@open-wallet-standard/core-linux-x64-gnu",
   "version": "0.2.27",
   "os": [
     "linux"

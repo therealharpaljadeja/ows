@@ -38,11 +38,11 @@ The bindings are **standalone** — they embed the Rust core via native FFI. No 
 
 | Language | Package | Install |
 |----------|---------|---------|
-| Node.js | [`@open-wallet-standard/node`](https://www.npmjs.com/package/@open-wallet-standard/node) | `npm install @open-wallet-standard/node` |
+| Node.js | [`@open-wallet-standard/core`](https://www.npmjs.com/package/@open-wallet-standard/core) | `npm install @open-wallet-standard/core` |
 | Python | [`open-wallet-standard`](https://pypi.org/project/open-wallet-standard/) | `pip install open-wallet-standard` |
 
 ```javascript
-import { createWallet, signMessage } from "@open-wallet-standard/node";
+import { createWallet, signMessage } from "@open-wallet-standard/core";
 
 const wallet = createWallet("my-wallet");
 console.log(wallet.accounts); // addresses for EVM, Solana, Bitcoin, Cosmos, Tron

@@ -69,14 +69,14 @@ fn update_node_bindings() {
 
     // Check if already installed
     let check = Command::new("npm")
-        .args(["list", "-g", "@open-wallet-standard/node"])
+        .args(["list", "-g", "@open-wallet-standard/core"])
         .output();
 
     match check {
         Ok(output) if output.status.success() => {
             println!("Updating Node bindings...");
             let status = Command::new("npm")
-                .args(["install", "-g", "@open-wallet-standard/node@latest"])
+                .args(["install", "-g", "@open-wallet-standard/core@latest"])
                 .status();
             match status {
                 Ok(s) if s.success() => println!("Node bindings updated."),
