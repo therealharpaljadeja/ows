@@ -1,0 +1,10 @@
+## Supported Chains
+
+| Chain | Curve | Address Format | Derivation Path |
+|-------|-------|----------------|-----------------|
+| EVM (Ethereum, Polygon, etc.) | secp256k1 | EIP-55 checksummed | `m/44'/60'/0'/0/0` |
+| Solana | Ed25519 | base58 | `m/44'/501'/0'/0'` |
+| Bitcoin | secp256k1 | BIP-84 bech32 | `m/84'/0'/0'/0/0` |
+| Cosmos | secp256k1 | bech32 | `m/44'/118'/0'/0/0` |
+| Tron | secp256k1 | base58check | `m/44'/195'/0'/0/0` |
+| TON | Ed25519 | raw/bounceable | `m/44'/607'/0'` |

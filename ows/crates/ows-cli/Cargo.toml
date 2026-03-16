@@ -5,6 +5,7 @@ edition = "2021"
 license = "MIT"
 description = "CLI for the Open Wallet Standard"
 repository = "https://github.com/open-wallet-standard/core"
+readme = "README.md"
 
 [[bin]]
 name = "ows"

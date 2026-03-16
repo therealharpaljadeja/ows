@@ -5,6 +5,7 @@ edition = "2021"
 license = "MIT"
 description = "High-level library API for the Open Wallet Standard"
 repository = "https://github.com/open-wallet-standard/core"
+readme = "README.md"
 
 [features]
 default = []
