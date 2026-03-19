@@ -45,17 +45,42 @@
       <span class="dot"></span>
       Open Standard v0.3.0
     </div>
-    <h1 class="hero-title">OWS</h1>
-    <p class="hero-subtitle">Open Wallet Standard</p>
-    <p class="hero-description">
-      An open, neutral standard for secure local wallet storage and agent access.
-      One vault, one interface, every chain. Agents sign transactions without ever
-      touching private keys. OWS exists to give every AI agent a wallet it can
-      trust&mdash;and every user a wallet they control.
-    </p>
-    <div class="hero-actions">
-      <a href="docs/" class="btn btn-primary btn-large">Read the Spec</a>
-      <a href="#quickstart" class="btn btn-outline btn-large">Quick Start</a>
+    <div class="hero-top">
+      <div class="hero-left">
+        <h1 class="hero-title">OWS</h1>
+        <p class="hero-subtitle">Open Wallet Standard</p>
+      </div>
+      <div class="hero-right">
+        <p class="hero-description">
+          An open, neutral standard for secure local wallet storage and agent access.
+          One vault, one interface, every chain. Agents sign transactions without ever
+          touching private keys. OWS exists to give every AI agent a wallet it can
+          trust&mdash;and every user a wallet they control.
+        </p>
+        <div class="hero-actions">
+          <a href="docs/" class="btn btn-primary btn-large">Read the Spec</a>
+          <a href="#quickstart" class="btn btn-outline btn-large">Quick Start</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Terminal Demo -->
+    <div class="hero-terminal">
+      <div class="terminal-demo" id="terminal-demo">
+        <div class="terminal-chrome">
+          <div class="terminal-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="terminal-tabs">
+            <button class="terminal-tab active">Create</button>
+            <button class="terminal-tab">Sign</button>
+            <button class="terminal-tab">Ecosystem</button>
+          </div>
+          <button class="terminal-replay" title="Replay">&#x21bb;</button>
+        </div>
+        <div class="terminal-body"></div>
+      </div>
+      <p class="terminal-annotation">One command creates addresses for every supported chain</p>
     </div>
 
   </section>
@@ -683,5 +708,6 @@ ows sign tx --wallet agent-treasury --chain evm --tx-hex <span class="string">"d
   </footer>
 
   <script src="js/main.js"></script>
+  <script src="js/terminal-demo.js"></script>
 </body>
 </html>
