@@ -598,6 +598,9 @@ fn broadcast(chain: ChainType, rpc_url: &str, signed_bytes: &[u8]) -> Result<Str
         ChainType::Spark => Err(OwsLibError::InvalidInput(
             "broadcast not yet supported for Spark".into(),
         )),
+        ChainType::Filecoin => Err(OwsLibError::InvalidInput(
+            "broadcast not yet supported for Filecoin".into(),
+        )),
     }
 }
 
@@ -1098,7 +1101,7 @@ mod tests {
 
         assert_eq!(
             info.accounts.len(),
-            6,
+            ALL_CHAIN_TYPES.len(),
             "should have one account per chain type"
         );
 
