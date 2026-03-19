@@ -349,6 +349,7 @@ code, pre {
   padding: 1rem 1.25rem;
   height: 280px;
   overflow-y: auto;
+  overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   line-height: 1.65;
@@ -1178,8 +1179,19 @@ div:hover > .code-copy-btn { opacity: 1; }
 /* === Responsive === */
 @media (max-width: 640px) {
   .hero {
-    padding-top: calc(var(--header-height) + 3rem);
-    padding-bottom: 3rem;
+    padding-top: calc(var(--header-height) + 1.5rem);
+    padding-bottom: 1.5rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+  .hero-description {
+    font-size: 0.9375rem;
+  }
+  .hero-actions {
+    flex-direction: column;
+  }
+  .header-actions {
+    display: none;
   }
   .section {
     padding: 3rem 1.25rem;
@@ -1207,26 +1219,19 @@ div:hover > .code-copy-btn { opacity: 1; }
   .prior-art-grid {
     grid-template-columns: 1fr;
   }
-  .hero {
-    padding-top: calc(var(--header-height) + 1.5rem);
-    padding-bottom: 1.5rem;
-  }
-  .hero-actions {
-    flex-direction: column;
-  }
-  .header-actions {
-    display: none;
-  }
   .hero-terminal {
-    margin-top: 1.5rem;
+    margin-top: 1.25rem;
   }
   .terminal-body {
     padding: 0.75rem;
-    height: 260px;
+    height: 300px;
     font-size: 0.6875rem;
   }
   .terminal-tab {
     font-size: 0.6875rem;
     padding: 0.2rem 0.5rem;
+  }
+  .terminal-annotation {
+    font-size: 0.8125rem;
   }
 }
