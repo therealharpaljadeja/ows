@@ -213,50 +213,98 @@
 
     <!-- Architecture Diagram -->
     <div class="arch-diagram">
-      <div class="arch-row arch-row--top">
+      <!-- Multiple agents at top -->
+      <div class="arch-agents-row">
         <div class="arch-node arch-node--agent">
-          <div class="arch-node-label">Agent / CLI / App</div>
+          <div class="arch-node-label">Tempo</div>
+        </div>
+        <div class="arch-node arch-node--agent">
+          <div class="arch-node-label">Claude</div>
+        </div>
+        <div class="arch-node arch-node--agent">
+          <div class="arch-node-label">OpenAI</div>
+        </div>
+        <div class="arch-node arch-node--agent">
+          <div class="arch-node-label">Polymarket</div>
+        </div>
+        <div class="arch-node arch-node--agent arch-node--agent-more">
+          <div class="arch-node-label">&hellip;</div>
         </div>
       </div>
-      <div class="arch-connector"><svg width="2" height="32"><line x1="1" y1="0" x2="1" y2="32" stroke="var(--gray-300)" stroke-width="1.5" stroke-dasharray="4,3"/></svg></div>
-      <div class="arch-row arch-row--interface">
+
+      <!-- Converging lines to interface -->
+      <svg class="arch-funnel-svg" viewBox="0 0 500 28" preserveAspectRatio="none">
+        <line x1="50" y1="0" x2="250" y2="28" stroke="var(--gray-300)" stroke-width="1" stroke-dasharray="4,3"/>
+        <line x1="150" y1="0" x2="250" y2="28" stroke="var(--gray-300)" stroke-width="1" stroke-dasharray="4,3"/>
+        <line x1="250" y1="0" x2="250" y2="28" stroke="var(--gray-300)" stroke-width="1" stroke-dasharray="4,3"/>
+        <line x1="350" y1="0" x2="250" y2="28" stroke="var(--gray-300)" stroke-width="1" stroke-dasharray="4,3"/>
+        <line x1="450" y1="0" x2="250" y2="28" stroke="var(--gray-300)" stroke-width="1" stroke-dasharray="4,3"/>
+      </svg>
+
+      <!-- OWS Interface -->
+      <div class="arch-row">
         <div class="arch-node arch-node--interface">
           <div class="arch-node-label">OWS Interface</div>
           <div class="arch-node-sub">MCP &middot; SDK &middot; CLI &middot; REST</div>
         </div>
       </div>
-      <div class="arch-connector"><svg width="2" height="24"><line x1="1" y1="0" x2="1" y2="24" stroke="var(--gray-300)" stroke-width="1.5" stroke-dasharray="4,3"/></svg></div>
-      <div class="arch-row arch-row--core">
-        <div class="arch-node arch-node--policy">
-          <div class="arch-node-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+
+      <!-- Down arrow into access layer -->
+      <svg class="arch-vert-connector" width="2" height="20"><line x1="1" y1="0" x2="1" y2="20" stroke="var(--gray-300)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>
+
+      <!-- Access Layer box -->
+      <div class="arch-access-layer">
+        <div class="arch-boundary-inline">
+          <span class="arch-boundary-label">Keys never cross this boundary</span>
+        </div>
+
+        <!-- Internal flow -->
+        <div class="arch-internal">
+          <!-- Step 1: Policy -->
+          <div class="arch-internal-step">
+            <div class="arch-step-label">1</div>
+            <div class="arch-node arch-node--policy arch-node--sm">
+              <div class="arch-node-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div class="arch-node-label">Policy Engine</div>
+              <div class="arch-node-sub">Evaluate limits, allowlists, chain rules</div>
+            </div>
           </div>
-          <div class="arch-node-label">Policy Engine</div>
-          <div class="arch-node-sub">Limits &middot; Allowlists &middot; Chain rules</div>
-        </div>
-        <div class="arch-connector-horiz">
-          <svg width="40" height="2"><line x1="0" y1="1" x2="40" y2="1" stroke="var(--gray-300)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>
-        </div>
-        <div class="arch-node arch-node--enclave">
-          <div class="arch-node-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+
+          <svg class="arch-vert-connector" width="2" height="16"><line x1="1" y1="0" x2="1" y2="16" stroke="var(--gray-300)" stroke-width="1.5"/></svg>
+
+          <!-- Step 2: Sign -->
+          <div class="arch-internal-step">
+            <div class="arch-step-label">2</div>
+            <div class="arch-node arch-node--enclave arch-node--sm">
+              <div class="arch-node-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </div>
+              <div class="arch-node-label">Signing Enclave</div>
+              <div class="arch-node-sub">Isolated process &middot; mlock &middot; zeroize</div>
+            </div>
+            <svg class="arch-horiz-connector" width="32" height="2"><line x1="0" y1="1" x2="32" y2="1" stroke="var(--gray-300)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>
+            <div class="arch-node arch-node--vault arch-node--sm">
+              <div class="arch-node-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+              </div>
+              <div class="arch-node-label">Wallet Vault</div>
+              <div class="arch-node-sub"><code>~/.ows/wallets/</code></div>
+            </div>
           </div>
-          <div class="arch-node-label">Signing Enclave</div>
-          <div class="arch-node-sub">Isolated process &middot; mlock &middot; zeroize</div>
-        </div>
-        <div class="arch-connector-horiz">
-          <svg width="40" height="2"><line x1="0" y1="1" x2="40" y2="1" stroke="var(--gray-300)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>
-        </div>
-        <div class="arch-node arch-node--vault">
-          <div class="arch-node-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+
+          <svg class="arch-vert-connector" width="2" height="16"><line x1="1" y1="0" x2="1" y2="16" stroke="var(--gray-300)" stroke-width="1.5"/></svg>
+
+          <!-- Step 3: Return -->
+          <div class="arch-internal-step">
+            <div class="arch-step-label">3</div>
+            <div class="arch-node arch-node--return arch-node--sm">
+              <div class="arch-node-label">Signed Transaction</div>
+              <div class="arch-node-sub">Key wiped &middot; returned to caller</div>
+            </div>
           </div>
-          <div class="arch-node-label">Wallet Vault</div>
-          <div class="arch-node-sub"><code>~/.ows/wallets/</code></div>
         </div>
-      </div>
-      <div class="arch-boundary">
-        <span class="arch-boundary-label">Keys never cross this boundary</span>
       </div>
     </div>
 
