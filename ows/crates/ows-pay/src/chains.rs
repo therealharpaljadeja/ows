@@ -1,7 +1,6 @@
 /// Chain mapping between OWS, MoonPay, and x402 identifiers.
 ///
 /// This is the single source of truth for chain compatibility across the three systems.
-
 /// A supported chain with identifiers across all systems.
 #[derive(Debug, Clone)]
 pub struct ChainMapping {
