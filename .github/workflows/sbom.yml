@@ -48,15 +48,26 @@ jobs:
         run: |
           mkdir -p sbom-output
 
-          # Rust workspace crates
-          for f in ows/crates/*/bom.json; do
-            crate=$(basename "$(dirname "$f")")
-            cp "$f" "sbom-output/${crate}.cdx.json"
+          # Rust workspace crates (handles both bom.json and bom.cdx.json)
+          for dir in ows/crates/*/; do
+            crate=$(basename "$dir")
+            for ext in bom.cdx.json bom.json; do
+              if [ -f "$dir$ext" ]; then
+                cp "$dir$ext" "sbom-output/${crate}.cdx.json"
+                break
+              fi
+            done
           done
 
-          # Bindings
-          cp bindings/node/bom.json sbom-output/ows-node.cdx.json 2>/dev/null || true
-          cp bindings/python/bom.json sbom-output/ows-python.cdx.json 2>/dev/null || true
+          # Bindings (handles both bom.json and bom.cdx.json)
+          for name in node python; do
+            for ext in bom.cdx.json bom.json; do
+              if [ -f "bindings/${name}/${ext}" ]; then
+                cp "bindings/${name}/${ext}" "sbom-output/ows-${name}.cdx.json"
+                break
+              fi
+            done
+          done
 
       - name: Generate full-repo SBOM with Syft (SPDX)
         uses: anchore/sbom-action@e11c554f704a0b820cbf8c51673f6945e0731532 # v0.20.0

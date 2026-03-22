@@ -53,6 +53,15 @@ jobs:
 
           gh pr create \
             --title "chore: bump version to $V" \
-            --body "Automated version bump to \`$V\` triggered by tag \`${GITHUB_REF_NAME}\`." \
+            --body "## Summary
+
+          Automated version bump to \`$V\` triggered by tag [\`${GITHUB_REF_NAME}\`](https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}).
+
+          ### Changes
+          - Rust crate versions (\`Cargo.toml\`)
+          - Python binding version (\`pyproject.toml\`, \`Cargo.toml\`)
+          - Node binding version (\`package.json\`, \`Cargo.toml\`, platform packages)
+          - Skill manifest version (\`SKILL.md\`)
+          - Regenerated READMEs" \
             --base main \
             --head "$BRANCH"
