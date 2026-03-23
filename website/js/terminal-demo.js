@@ -28,7 +28,7 @@
     },
     {
       id: 'sign',
-      annotation: 'Keys never leave the enclave \u2014 every action is policy-checked first',
+      annotation: 'Every signing request is policy-checked before keys are touched',
       actions: [
         { type: 'cmd', text: 'ows sign tx --wallet agent-treasury --chain evm \\' },
         { type: 'cont', text: '    --to 0x742d35Cc6634C0 --value 0.1ETH' },
@@ -41,8 +41,8 @@
           '  <span class="t-dim">\u2514\u2500</span> Chain eip155:1 permitted',
         ]},
         { type: 'pause', ms: 400 },
-        { type: 'spin', text: 'Signing in enclave...', ms: 500,
-          done: '<span class="t-green">\u2713</span> Signed <span class="t-dim">(key never left enclave)</span>' },
+        { type: 'spin', text: 'Signing...', ms: 500,
+          done: '<span class="t-green">\u2713</span> Signed <span class="t-dim">(key decrypted, used, wiped)</span>' },
         { type: 'pause', ms: 200 },
         { type: 'lines', speed: 60, lines: [
           '',
