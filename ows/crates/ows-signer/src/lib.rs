@@ -164,7 +164,7 @@ mod integration_tests {
         let fil_addr = derive_address_for_chain(&mnemonic, ChainType::Filecoin);
 
         // All addresses should be different
-        let addrs = vec![
+        let addrs = [
             &evm_addr,
             &sol_addr,
             &btc_addr,

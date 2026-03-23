@@ -268,6 +268,100 @@ mod tests {
         }
     }
 
+    // === Characterization tests: lock down current behavior before refactoring ===
+
+    #[test]
+    fn test_abandon_mnemonic_evm_address() {
+        // Known test vector: "abandon" mnemonic → known EVM address
+        // This address is well-documented across the ecosystem
+        let mnemonic = Mnemonic::from_phrase(ABANDON_PHRASE).unwrap();
+        let key =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/60'/0'/0/0", Curve::Secp256k1)
+                .unwrap();
+
+        // Derive the EVM address from the key
+        let signer = crate::chains::EvmSigner;
+        use crate::traits::ChainSigner;
+        let address = signer.derive_address(key.expose()).unwrap();
+        assert_eq!(
+            address, "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
+            "abandon mnemonic should derive to known EVM address"
+        );
+    }
+
+    #[test]
+    fn test_same_mnemonic_same_path_same_curve_same_key() {
+        // Multiple independent derivations must produce identical results
+        let mnemonic = Mnemonic::from_phrase(ABANDON_PHRASE).unwrap();
+        let path = "m/44'/60'/0'/0/0";
+        let curve = Curve::Secp256k1;
+
+        let key1 = HdDeriver::derive_from_mnemonic(&mnemonic, "", path, curve).unwrap();
+        let key2 = HdDeriver::derive_from_mnemonic(&mnemonic, "", path, curve).unwrap();
+        let key3 = HdDeriver::derive_from_mnemonic(&mnemonic, "", path, curve).unwrap();
+
+        assert_eq!(key1.expose(), key2.expose());
+        assert_eq!(key2.expose(), key3.expose());
+    }
+
+    #[test]
+    fn test_different_index_different_key_evm() {
+        let mnemonic = Mnemonic::from_phrase(ABANDON_PHRASE).unwrap();
+        let key0 =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/60'/0'/0/0", Curve::Secp256k1)
+                .unwrap();
+        let key1 =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/60'/0'/0/1", Curve::Secp256k1)
+                .unwrap();
+        let key2 =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/60'/0'/0/2", Curve::Secp256k1)
+                .unwrap();
+
+        assert_ne!(key0.expose(), key1.expose());
+        assert_ne!(key1.expose(), key2.expose());
+        assert_ne!(key0.expose(), key2.expose());
+    }
+
+    #[test]
+    fn test_different_index_different_key_ed25519() {
+        let mnemonic = Mnemonic::from_phrase(ABANDON_PHRASE).unwrap();
+        let key0 =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/501'/0'/0'", Curve::Ed25519)
+                .unwrap();
+        let key1 =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/501'/1'/0'", Curve::Ed25519)
+                .unwrap();
+
+        assert_ne!(key0.expose(), key1.expose());
+    }
+
+    #[test]
+    fn test_cached_derivation_matches_uncached() {
+        let mnemonic = Mnemonic::from_phrase(ABANDON_PHRASE).unwrap();
+        let path = "m/44'/60'/0'/0/0";
+        let curve = Curve::Secp256k1;
+
+        let uncached = HdDeriver::derive_from_mnemonic(&mnemonic, "", path, curve).unwrap();
+        let cached = HdDeriver::derive_from_mnemonic_cached(&mnemonic, "", path, curve).unwrap();
+
+        assert_eq!(uncached.expose(), cached.expose());
+    }
+
+    #[test]
+    fn test_key_length_32_bytes_all_curves() {
+        let mnemonic = Mnemonic::from_phrase(ABANDON_PHRASE).unwrap();
+
+        let secp_key =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/60'/0'/0/0", Curve::Secp256k1)
+                .unwrap();
+        assert_eq!(secp_key.len(), 32);
+
+        let ed_key =
+            HdDeriver::derive_from_mnemonic(&mnemonic, "", "m/44'/501'/0'/0'", Curve::Ed25519)
+                .unwrap();
+        assert_eq!(ed_key.len(), 32);
+    }
+
     #[test]
     fn test_deterministic() {
         let seed = test_seed();

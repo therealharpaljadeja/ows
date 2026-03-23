@@ -1600,6 +1600,790 @@ mod tests {
     }
 
     // ================================================================
+    // CHARACTERIZATION TESTS: lock down current signing behavior before refactoring
+    // ================================================================
+
+    #[test]
+    fn char_create_wallet_sign_transaction_with_passphrase() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-pass-tx", None, Some("secret"), Some(vault)).unwrap();
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig =
+            sign_transaction("char-pass-tx", "evm", tx, Some("secret"), None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+        assert!(sig.recovery_id.is_some());
+    }
+
+    #[test]
+    fn char_create_wallet_sign_transaction_empty_passphrase() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-empty-tx", None, None, Some(vault)).unwrap();
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig =
+            sign_transaction("char-empty-tx", "evm", tx, Some(""), None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+    }
+
+    #[test]
+    fn char_no_passphrase_none_none_sign_transaction() {
+        // Most common real-world flow: create wallet with no passphrase (None),
+        // sign with no passphrase (None). Both default to "".
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-none-none", None, None, Some(vault)).unwrap();
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig = sign_transaction("char-none-none", "evm", tx, None, None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+        assert!(sig.recovery_id.is_some());
+    }
+
+    #[test]
+    fn char_no_passphrase_none_none_sign_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-none-msg", None, None, Some(vault)).unwrap();
+
+        let sig = sign_message(
+            "char-none-msg",
+            "evm",
+            "hello",
+            None,
+            None,
+            None,
+            Some(vault),
+        )
+        .unwrap();
+        assert!(!sig.signature.is_empty());
+    }
+
+    #[test]
+    fn char_no_passphrase_none_none_export() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-none-exp", None, None, Some(vault)).unwrap();
+
+        let phrase = export_wallet("char-none-exp", None, Some(vault)).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 12);
+    }
+
+    #[test]
+    fn char_empty_passphrase_none_and_some_empty_are_equivalent() {
+        // Verify that None and Some("") produce identical behavior for both
+        // create and sign — they must be interchangeable.
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        // Create with None (defaults to "")
+        create_wallet("char-equiv", None, None, Some(vault)).unwrap();
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+        // All four combinations of None/Some("") must produce the same signature
+        let sig_none = sign_transaction("char-equiv", "evm", tx, None, None, Some(vault)).unwrap();
+        let sig_empty =
+            sign_transaction("char-equiv", "evm", tx, Some(""), None, Some(vault)).unwrap();
+
+        assert_eq!(
+            sig_none.signature, sig_empty.signature,
+            "passphrase=None and passphrase=Some(\"\") must produce identical signatures"
+        );
+
+        // Same for sign_message
+        let msg_none =
+            sign_message("char-equiv", "evm", "test", None, None, None, Some(vault)).unwrap();
+        let msg_empty = sign_message(
+            "char-equiv",
+            "evm",
+            "test",
+            Some(""),
+            None,
+            None,
+            Some(vault),
+        )
+        .unwrap();
+
+        assert_eq!(
+            msg_none.signature, msg_empty.signature,
+            "sign_message: None and Some(\"\") must be equivalent"
+        );
+
+        // Export with both
+        let export_none = export_wallet("char-equiv", None, Some(vault)).unwrap();
+        let export_empty = export_wallet("char-equiv", Some(""), Some(vault)).unwrap();
+        assert_eq!(
+            export_none, export_empty,
+            "export_wallet: None and Some(\"\") must return the same mnemonic"
+        );
+    }
+
+    #[test]
+    fn char_create_with_some_empty_sign_with_none() {
+        // Create with explicit Some(""), sign with None — should work
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-some-none", None, Some(""), Some(vault)).unwrap();
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig = sign_transaction("char-some-none", "evm", tx, None, None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+    }
+
+    #[test]
+    fn char_no_passphrase_wallet_rejects_nonempty_passphrase() {
+        // A wallet created without passphrase must NOT be decryptable with a
+        // random passphrase — this verifies the empty string is actually used
+        // as the encryption key, not bypassed.
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-no-pass-reject", None, None, Some(vault)).unwrap();
+
+        let result = sign_message(
+            "char-no-pass-reject",
+            "evm",
+            "test",
+            Some("some-random-passphrase"),
+            None,
+            None,
+            Some(vault),
+        );
+        assert!(
+            result.is_err(),
+            "non-empty passphrase on empty-passphrase wallet should fail"
+        );
+        match result.unwrap_err() {
+            OwsLibError::Crypto(_) => {} // Expected: decryption failure
+            other => panic!("expected Crypto error, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn char_sign_transaction_wrong_passphrase_returns_crypto_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-wrong-pass", None, Some("correct"), Some(vault)).unwrap();
+
+        let tx = "deadbeef";
+        let result = sign_transaction(
+            "char-wrong-pass",
+            "evm",
+            tx,
+            Some("wrong"),
+            None,
+            Some(vault),
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            OwsLibError::Crypto(_) => {} // Expected
+            other => panic!("expected Crypto error, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn char_sign_transaction_nonexistent_wallet_returns_wallet_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = sign_transaction("ghost", "evm", "deadbeef", None, None, Some(dir.path()));
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            OwsLibError::WalletNotFound(name) => assert_eq!(name, "ghost"),
+            other => panic!("expected WalletNotFound, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn char_sign_and_send_invalid_rpc_returns_broadcast_failed() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-rpc-fail", None, None, Some(vault)).unwrap();
+
+        // Build a minimal unsigned EIP-1559 transaction
+        let items: Vec<u8> = [
+            ows_signer::rlp::encode_bytes(&[1]),          // chain_id = 1
+            ows_signer::rlp::encode_bytes(&[]),           // nonce = 0
+            ows_signer::rlp::encode_bytes(&[1]),          // maxPriorityFeePerGas
+            ows_signer::rlp::encode_bytes(&[100]),        // maxFeePerGas
+            ows_signer::rlp::encode_bytes(&[0x52, 0x08]), // gasLimit = 21000
+            ows_signer::rlp::encode_bytes(&[0xDE, 0xAD]), // to (truncated)
+            ows_signer::rlp::encode_bytes(&[]),           // value = 0
+            ows_signer::rlp::encode_bytes(&[]),           // data
+            ows_signer::rlp::encode_list(&[]),            // accessList
+        ]
+        .concat();
+        let mut unsigned_tx = vec![0x02u8];
+        unsigned_tx.extend_from_slice(&ows_signer::rlp::encode_list(&items));
+        let tx_hex = hex::encode(&unsigned_tx);
+
+        let result = sign_and_send(
+            "char-rpc-fail",
+            "evm",
+            &tx_hex,
+            None,
+            None,
+            Some("http://127.0.0.1:1"), // unreachable RPC
+            Some(vault),
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            OwsLibError::BroadcastFailed(_) => {} // Expected
+            other => panic!("expected BroadcastFailed, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn char_create_sign_rename_sign_with_new_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("orig-name", None, None, Some(vault)).unwrap();
+
+        // Sign with original name
+        let sig1 = sign_message("orig-name", "evm", "test", None, None, None, Some(vault)).unwrap();
+        assert!(!sig1.signature.is_empty());
+
+        // Rename
+        rename_wallet("orig-name", "new-name", Some(vault)).unwrap();
+
+        // Old name no longer works
+        assert!(sign_message("orig-name", "evm", "test", None, None, None, Some(vault)).is_err());
+
+        // Sign with new name — should produce same signature (same key)
+        let sig2 = sign_message("new-name", "evm", "test", None, None, None, Some(vault)).unwrap();
+        assert_eq!(
+            sig1.signature, sig2.signature,
+            "renamed wallet should produce identical signatures"
+        );
+    }
+
+    #[test]
+    fn char_create_sign_delete_sign_returns_wallet_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("del-me-char", None, None, Some(vault)).unwrap();
+
+        // Sign succeeds
+        let sig =
+            sign_message("del-me-char", "evm", "test", None, None, None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+
+        // Delete
+        delete_wallet("del-me-char", Some(vault)).unwrap();
+
+        // Sign after delete fails with WalletNotFound
+        let result = sign_message("del-me-char", "evm", "test", None, None, None, Some(vault));
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            OwsLibError::WalletNotFound(name) => assert_eq!(name, "del-me-char"),
+            other => panic!("expected WalletNotFound, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn char_import_sign_export_reimport_sign_deterministic() {
+        let v1 = tempfile::tempdir().unwrap();
+        let v2 = tempfile::tempdir().unwrap();
+
+        // Import with known mnemonic
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        import_wallet_mnemonic("char-det", phrase, None, None, Some(v1.path())).unwrap();
+
+        // Sign in vault 1
+        let sig1 = sign_message(
+            "char-det",
+            "evm",
+            "determinism test",
+            None,
+            None,
+            None,
+            Some(v1.path()),
+        )
+        .unwrap();
+
+        // Export
+        let exported = export_wallet("char-det", None, Some(v1.path())).unwrap();
+        assert_eq!(exported.trim(), phrase);
+
+        // Re-import into vault 2
+        import_wallet_mnemonic("char-det-2", &exported, None, None, Some(v2.path())).unwrap();
+
+        // Sign in vault 2 — must produce identical signature
+        let sig2 = sign_message(
+            "char-det-2",
+            "evm",
+            "determinism test",
+            None,
+            None,
+            None,
+            Some(v2.path()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            sig1.signature, sig2.signature,
+            "import→sign→export→reimport→sign must produce identical signatures"
+        );
+    }
+
+    #[test]
+    fn char_import_private_key_sign_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        import_wallet_private_key(
+            "char-pk",
+            TEST_PRIVKEY,
+            Some("evm"),
+            None,
+            Some(vault),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let sig = sign_transaction("char-pk", "evm", "deadbeef", None, None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+        assert!(sig.recovery_id.is_some());
+    }
+
+    #[test]
+    fn char_sign_message_all_chain_families() {
+        // Verify sign_message works for every chain family (EVM, Solana, Bitcoin, Cosmos, Tron, TON, Sui)
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-all-chains", None, None, Some(vault)).unwrap();
+
+        let chains = [
+            ("evm", true),
+            ("solana", false),
+            ("bitcoin", true),
+            ("cosmos", true),
+            ("tron", true),
+            ("ton", false),
+            ("sui", false),
+        ];
+        for (chain, has_recovery_id) in &chains {
+            let result = sign_message(
+                "char-all-chains",
+                chain,
+                "hello",
+                None,
+                None,
+                None,
+                Some(vault),
+            );
+            assert!(
+                result.is_ok(),
+                "sign_message failed for {chain}: {:?}",
+                result.err()
+            );
+            let sig = result.unwrap();
+            assert!(!sig.signature.is_empty(), "signature empty for {chain}");
+            if *has_recovery_id {
+                assert!(
+                    sig.recovery_id.is_some(),
+                    "expected recovery_id for {chain}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn char_sign_typed_data_evm_valid_signature() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-typed", None, None, Some(vault)).unwrap();
+
+        let typed_data = r#"{
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"}
+                ],
+                "Test": [{"name": "value", "type": "uint256"}]
+            },
+            "primaryType": "Test",
+            "domain": {"name": "TestDapp", "version": "1", "chainId": "1"},
+            "message": {"value": "42"}
+        }"#;
+
+        let result = sign_typed_data("char-typed", "evm", typed_data, None, None, Some(vault));
+        assert!(result.is_ok(), "sign_typed_data failed: {:?}", result.err());
+
+        let sig = result.unwrap();
+        let sig_bytes = hex::decode(&sig.signature).unwrap();
+        assert_eq!(sig_bytes.len(), 65, "EIP-712 signature should be 65 bytes");
+
+        // v should be 27 or 28 per EIP-712 convention
+        let v = sig_bytes[64];
+        assert!(v == 27 || v == 28, "EIP-712 v should be 27 or 28, got {v}");
+    }
+
+    // ================================================================
+    // CHARACTERIZATION TESTS (wave 2): refactoring-path edge cases
+    // ================================================================
+
+    #[test]
+    fn char_sign_with_nonzero_account_index() {
+        // The `index` parameter flows through decrypt_signing_key → HD derivation.
+        // Verify that index=0 and index=1 produce different signatures via the public API.
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-idx", None, None, Some(vault)).unwrap();
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+        let sig0 = sign_transaction("char-idx", "evm", tx, None, Some(0), Some(vault)).unwrap();
+        let sig1 = sign_transaction("char-idx", "evm", tx, None, Some(1), Some(vault)).unwrap();
+
+        assert_ne!(
+            sig0.signature, sig1.signature,
+            "index 0 and index 1 must produce different signatures (different derived keys)"
+        );
+
+        // Index 0 should match the default (None)
+        let sig_default = sign_transaction("char-idx", "evm", tx, None, None, Some(vault)).unwrap();
+        assert_eq!(
+            sig0.signature, sig_default.signature,
+            "index=0 should match index=None (default)"
+        );
+    }
+
+    #[test]
+    fn char_sign_with_nonzero_index_sign_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-idx-msg", None, None, Some(vault)).unwrap();
+
+        let sig0 = sign_message(
+            "char-idx-msg",
+            "evm",
+            "hello",
+            None,
+            None,
+            Some(0),
+            Some(vault),
+        )
+        .unwrap();
+        let sig1 = sign_message(
+            "char-idx-msg",
+            "evm",
+            "hello",
+            None,
+            None,
+            Some(1),
+            Some(vault),
+        )
+        .unwrap();
+
+        assert_ne!(
+            sig0.signature, sig1.signature,
+            "different account indices should yield different signatures"
+        );
+    }
+
+    #[test]
+    fn char_sign_transaction_0x_prefix_stripped() {
+        // sign_transaction strips "0x" prefix from tx_hex. Verify both forms produce
+        // the same signature.
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-0x", None, None, Some(vault)).unwrap();
+
+        let tx_no_prefix = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let tx_with_prefix = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+        let sig1 =
+            sign_transaction("char-0x", "evm", tx_no_prefix, None, None, Some(vault)).unwrap();
+        let sig2 =
+            sign_transaction("char-0x", "evm", tx_with_prefix, None, None, Some(vault)).unwrap();
+
+        assert_eq!(
+            sig1.signature, sig2.signature,
+            "0x-prefixed and bare hex should produce identical signatures"
+        );
+    }
+
+    #[test]
+    fn char_24_word_mnemonic_wallet_lifecycle() {
+        // Verify 24-word mnemonics work identically to 12-word through the full lifecycle.
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        let info = create_wallet("char-24w", Some(24), None, Some(vault)).unwrap();
+        assert!(!info.accounts.is_empty());
+
+        // Export → verify 24 words
+        let phrase = export_wallet("char-24w", None, Some(vault)).unwrap();
+        assert_eq!(
+            phrase.split_whitespace().count(),
+            24,
+            "should be a 24-word mnemonic"
+        );
+
+        // Sign transaction
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig = sign_transaction("char-24w", "evm", tx, None, None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+
+        // Sign message on multiple chains
+        for chain in &["evm", "solana", "bitcoin", "cosmos"] {
+            let result = sign_message("char-24w", chain, "test", None, None, None, Some(vault));
+            assert!(
+                result.is_ok(),
+                "24-word wallet sign_message failed for {chain}: {:?}",
+                result.err()
+            );
+        }
+
+        // Re-import into separate vault → deterministic
+        let v2 = tempfile::tempdir().unwrap();
+        import_wallet_mnemonic("char-24w-2", &phrase, None, None, Some(v2.path())).unwrap();
+        let sig2 = sign_transaction("char-24w-2", "evm", tx, None, None, Some(v2.path())).unwrap();
+        assert_eq!(
+            sig.signature, sig2.signature,
+            "reimported 24-word wallet must produce identical signature"
+        );
+    }
+
+    #[test]
+    fn char_concurrent_signing() {
+        // Multiple threads signing with the same wallet must all succeed.
+        // Relevant because agent signing will involve concurrent callers.
+        use std::sync::Arc;
+        use std::thread;
+
+        let dir = tempfile::tempdir().unwrap();
+        let vault_path = Arc::new(dir.path().to_path_buf());
+        create_wallet("char-conc", None, None, Some(&vault_path)).unwrap();
+
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let vp = Arc::clone(&vault_path);
+                thread::spawn(move || {
+                    let msg = format!("thread-{i}");
+                    let result = sign_message(
+                        "char-conc",
+                        "evm",
+                        &msg,
+                        None,
+                        None,
+                        None,
+                        Some(vp.as_path()),
+                    );
+                    assert!(
+                        result.is_ok(),
+                        "concurrent sign_message failed in thread {i}: {:?}",
+                        result.err()
+                    );
+                    result.unwrap()
+                })
+            })
+            .collect();
+
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+
+        // All signatures should be non-empty
+        for (i, sig) in results.iter().enumerate() {
+            assert!(
+                !sig.signature.is_empty(),
+                "thread {i} produced empty signature"
+            );
+        }
+
+        // Different messages → different signatures
+        for i in 0..results.len() {
+            for j in (i + 1)..results.len() {
+                assert_ne!(
+                    results[i].signature, results[j].signature,
+                    "threads {i} and {j} should produce different signatures (different messages)"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn char_evm_sign_transaction_recoverable() {
+        // Verify that EVM transaction signatures are ecrecover-compatible:
+        // recover the public key from the signature and compare to the wallet's address.
+        use sha3::Digest;
+
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        let info = create_wallet("char-tx-recover", None, None, Some(vault)).unwrap();
+        let evm_addr = info
+            .accounts
+            .iter()
+            .find(|a| a.chain_id.starts_with("eip155:"))
+            .unwrap()
+            .address
+            .clone();
+
+        let tx_hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig =
+            sign_transaction("char-tx-recover", "evm", tx_hex, None, None, Some(vault)).unwrap();
+
+        let sig_bytes = hex::decode(&sig.signature).unwrap();
+        assert_eq!(sig_bytes.len(), 65);
+
+        // EVM sign_transaction: keccak256(tx_bytes) then ecdsaSign
+        let tx_bytes = hex::decode(tx_hex).unwrap();
+        let hash = sha3::Keccak256::digest(&tx_bytes);
+
+        let v = sig_bytes[64];
+        let recid = k256::ecdsa::RecoveryId::try_from(v).unwrap();
+        let ecdsa_sig = k256::ecdsa::Signature::from_slice(&sig_bytes[..64]).unwrap();
+        let recovered_key =
+            k256::ecdsa::VerifyingKey::recover_from_prehash(&hash, &ecdsa_sig, recid).unwrap();
+
+        // Derive address from recovered key
+        let pubkey_bytes = recovered_key.to_encoded_point(false);
+        let pubkey_hash = sha3::Keccak256::digest(&pubkey_bytes.as_bytes()[1..]);
+        let recovered_addr = format!("0x{}", hex::encode(&pubkey_hash[12..]));
+
+        assert_eq!(
+            recovered_addr.to_lowercase(),
+            evm_addr.to_lowercase(),
+            "recovered address from tx signature should match wallet's EVM address"
+        );
+    }
+
+    #[test]
+    fn char_solana_extract_signable_through_sign_path() {
+        // Verify that the full Solana signing pipeline (extract_signable → sign → encode)
+        // works correctly through the library's sign_encode_and_broadcast path (minus broadcast).
+        // This locks down the Solana-specific header stripping that could regress during
+        // signing path unification.
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-sol-sig", None, None, Some(vault)).unwrap();
+
+        // Build a minimal Solana serialized tx: [1 sig slot] [64 zero bytes] [message]
+        let message_payload = b"test solana message payload 1234";
+        let mut tx_bytes = vec![0x01u8]; // 1 signature slot
+        tx_bytes.extend_from_slice(&[0u8; 64]); // placeholder signature
+        tx_bytes.extend_from_slice(message_payload);
+        let tx_hex = hex::encode(&tx_bytes);
+
+        // sign_transaction goes through: hex decode → decrypt key → signer.sign_transaction(key, tx_bytes)
+        // For Solana, sign_transaction signs the raw bytes (callers must pre-extract).
+        // But sign_and_send does: extract_signable → sign → encode → broadcast.
+        // Verify the raw sign_transaction path works:
+        let sig =
+            sign_transaction("char-sol-sig", "solana", &tx_hex, None, None, Some(vault)).unwrap();
+        assert_eq!(
+            hex::decode(&sig.signature).unwrap().len(),
+            64,
+            "Solana signature should be 64 bytes (Ed25519)"
+        );
+        assert!(sig.recovery_id.is_none(), "Ed25519 has no recovery ID");
+
+        // Now verify the sign_encode_and_broadcast pipeline (minus actual broadcast)
+        // by manually calling the signer's extract/sign/encode chain:
+        let key =
+            decrypt_signing_key("char-sol-sig", ChainType::Solana, "", None, Some(vault)).unwrap();
+        let signer = signer_for_chain(ChainType::Solana);
+
+        let signable = signer.extract_signable_bytes(&tx_bytes).unwrap();
+        assert_eq!(
+            signable, message_payload,
+            "extract_signable_bytes should return only the message portion"
+        );
+
+        let output = signer.sign_transaction(key.expose(), signable).unwrap();
+        let signed_tx = signer
+            .encode_signed_transaction(&tx_bytes, &output)
+            .unwrap();
+
+        // The signature should be at bytes 1..65 in the signed tx
+        assert_eq!(&signed_tx[1..65], &output.signature[..]);
+        // Message portion should be unchanged
+        assert_eq!(&signed_tx[65..], message_payload);
+        // Total length unchanged
+        assert_eq!(signed_tx.len(), tx_bytes.len());
+
+        // Verify the signature is valid
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&key.expose().try_into().unwrap());
+        let verifying_key = signing_key.verifying_key();
+        let ed_sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
+        verifying_key
+            .verify_strict(message_payload, &ed_sig)
+            .expect("Solana signature should verify against extracted message");
+    }
+
+    #[test]
+    fn char_library_encodes_before_broadcast() {
+        // The library's sign_and_send correctly calls encode_signed_transaction
+        // before broadcasting (unlike a raw sign_transaction call).
+        // This test verifies the library path by showing that:
+        // 1. sign_transaction returns a raw 65-byte signature
+        // 2. The library's internal pipeline produces a full RLP-encoded signed tx
+        // 3. They are fundamentally different
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("char-encode", None, None, Some(vault)).unwrap();
+
+        // Minimal EIP-1559 tx
+        let items: Vec<u8> = [
+            ows_signer::rlp::encode_bytes(&[1]),          // chain_id
+            ows_signer::rlp::encode_bytes(&[]),           // nonce
+            ows_signer::rlp::encode_bytes(&[1]),          // maxPriorityFeePerGas
+            ows_signer::rlp::encode_bytes(&[100]),        // maxFeePerGas
+            ows_signer::rlp::encode_bytes(&[0x52, 0x08]), // gasLimit = 21000
+            ows_signer::rlp::encode_bytes(&[0xDE, 0xAD]), // to
+            ows_signer::rlp::encode_bytes(&[]),           // value
+            ows_signer::rlp::encode_bytes(&[]),           // data
+            ows_signer::rlp::encode_list(&[]),            // accessList
+        ]
+        .concat();
+        let mut unsigned_tx = vec![0x02u8];
+        unsigned_tx.extend_from_slice(&ows_signer::rlp::encode_list(&items));
+        let tx_hex = hex::encode(&unsigned_tx);
+
+        // Path A: sign_transaction (returns raw signature)
+        let raw_sig =
+            sign_transaction("char-encode", "evm", &tx_hex, None, None, Some(vault)).unwrap();
+        let raw_sig_bytes = hex::decode(&raw_sig.signature).unwrap();
+
+        // Path B: the internal pipeline (what sign_and_send uses)
+        let key =
+            decrypt_signing_key("char-encode", ChainType::Evm, "", None, Some(vault)).unwrap();
+        let signer = signer_for_chain(ChainType::Evm);
+        let output = signer.sign_transaction(key.expose(), &unsigned_tx).unwrap();
+        let full_signed_tx = signer
+            .encode_signed_transaction(&unsigned_tx, &output)
+            .unwrap();
+
+        // Raw sig is 65 bytes (r || s || v)
+        assert_eq!(raw_sig_bytes.len(), 65);
+
+        // Full signed tx is RLP-encoded with type byte prefix
+        assert!(full_signed_tx.len() > 65);
+        assert_eq!(
+            full_signed_tx[0], 0x02,
+            "should preserve EIP-1559 type byte"
+        );
+
+        // They must be completely different
+        assert_ne!(raw_sig_bytes, full_signed_tx);
+
+        // The full signed tx should contain the r and s values from the signature
+        // somewhere in its RLP encoding (not at the same offsets)
+        let r_bytes = &raw_sig_bytes[..32];
+        let _s_bytes = &raw_sig_bytes[32..64];
+
+        // Verify r bytes appear in the full signed tx (they'll be RLP-encoded)
+        let full_hex = hex::encode(&full_signed_tx);
+        let r_hex = hex::encode(r_bytes);
+        assert!(
+            full_hex.contains(&r_hex),
+            "full signed tx should contain the r component"
+        );
+    }
+
+    // ================================================================
     // EIP-712 TYPED DATA SIGNING
     // ================================================================
 

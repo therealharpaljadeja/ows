@@ -256,6 +256,131 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // === Characterization tests: lock down current behavior before refactoring ===
+
+    #[test]
+    fn test_encrypt_decrypt_empty_passphrase() {
+        let plaintext = b"data with empty passphrase";
+        let envelope = encrypt(plaintext, "").unwrap();
+        let decrypted = decrypt(&envelope, "").unwrap();
+        assert_eq!(decrypted.expose(), plaintext);
+    }
+
+    #[test]
+    fn test_decrypt_empty_passphrase_rejects_nonempty() {
+        let plaintext = b"data with empty passphrase";
+        let envelope = encrypt(plaintext, "").unwrap();
+        let result = decrypt(&envelope, "wrong");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_malformed_iv_bad_hex() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.cipherparams.iv = "not-valid-hex!!!".to_string();
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_malformed_salt_bad_hex() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.kdfparams.salt = "zz".to_string();
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_malformed_ciphertext_bad_hex() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.ciphertext = "not-hex".to_string();
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_malformed_auth_tag_bad_hex() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.auth_tag = "not-hex".to_string();
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_truncated_auth_tag() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        // Truncate auth_tag to 8 hex chars (4 bytes instead of 16)
+        envelope.auth_tag = envelope.auth_tag[..8].to_string();
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_truncated_ciphertext() {
+        let mut envelope = encrypt(b"test data here", "pass").unwrap();
+        // Truncate ciphertext to 4 hex chars (2 bytes)
+        envelope.ciphertext = envelope.ciphertext[..4].to_string();
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_n_not_power_of_2() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.kdfparams.n = 3; // Not a power of 2
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_n_zero() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.kdfparams.n = 0;
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_n_below_minimum() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        // Set N to a valid power of 2 but below minimum
+        envelope.kdfparams.n = 512; // 2^9, below test minimum of 2^10
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_decrypt_dklen_below_32() {
+        let mut envelope = encrypt(b"test", "pass").unwrap();
+        envelope.kdfparams.dklen = 16;
+        let result = decrypt(&envelope, "pass");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidParams(_)));
+    }
+
+    #[test]
+    fn test_envelope_fields_correct() {
+        let envelope = encrypt(b"test", "pass").unwrap();
+        assert_eq!(envelope.cipher, "aes-256-gcm");
+        assert_eq!(envelope.kdf, "scrypt");
+        assert_eq!(envelope.kdfparams.dklen, 32);
+        assert_eq!(envelope.kdfparams.r, KDF_R);
+        assert_eq!(envelope.kdfparams.p, KDF_P);
+        // IV should be 12 bytes = 24 hex chars
+        assert_eq!(envelope.cipherparams.iv.len(), 24);
+        // Salt should be 32 bytes = 64 hex chars
+        assert_eq!(envelope.kdfparams.salt.len(), 64);
+        // Auth tag should be 16 bytes = 32 hex chars
+        assert_eq!(envelope.auth_tag.len(), 32);
+    }
+
     #[test]
     fn test_decrypt_dklen_above_32_should_not_panic() {
         // BUG TEST: When dklen > 32 in a tampered envelope, decrypt() panics

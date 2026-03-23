@@ -162,7 +162,7 @@ mod tests {
         // Bitcoin uses the same hash160
         let btc_hash = {
             let sha256 = sha2::Sha256::digest(pubkey_bytes);
-            let ripemd = ripemd::Ripemd160::digest(&sha256);
+            let ripemd = ripemd::Ripemd160::digest(sha256);
             ripemd.to_vec()
         };
 
