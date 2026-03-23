@@ -37,7 +37,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Verify Cargo.lock is up to date
-        run: cargo check --locked --workspace
+        run: cargo metadata --locked --format-version 1 > /dev/null
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -75,7 +75,7 @@ jobs:
           restore-keys: ${{ runner.os }}-node-cargo-
 
       - name: Verify Cargo.lock is up to date
-        run: cargo check --locked
+        run: cargo metadata --locked --format-version 1 > /dev/null
 
       - name: Install dependencies
         run: npm install
@@ -109,4 +109,4 @@ jobs:
           restore-keys: ${{ runner.os }}-python-cargo-
 
       - name: Verify Cargo.lock is up to date
-        run: cargo check --locked
+        run: cargo metadata --locked --format-version 1 > /dev/null

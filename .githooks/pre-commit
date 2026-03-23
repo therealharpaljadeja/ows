@@ -27,7 +27,7 @@ cargo build --workspace
 echo "Verifying Cargo.lock files are up to date..."
 ROOT="$(git rev-parse --show-toplevel)"
 for dir in ows bindings/node bindings/python; do
-  if ! cargo check --locked --manifest-path "$ROOT/$dir/Cargo.toml" 2>/dev/null; then
+  if ! cargo metadata --locked --format-version 1 --manifest-path "$ROOT/$dir/Cargo.toml" > /dev/null 2>&1; then
     echo ""
     echo "ERROR: $dir/Cargo.lock is out of date."
     echo "Run 'cargo check' in $dir/ to update it, then re-stage and commit."
