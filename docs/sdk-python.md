@@ -2,6 +2,8 @@
 
 > Native bindings for Python via PyO3. No CLI, no server, no subprocess &mdash; the Rust core runs in-process.
 
+This document is non-normative reference implementation documentation. Package names and function signatures here do not define the OWS standard.
+
 [![PyPI](https://img.shields.io/pypi/v/open-wallet-standard)](https://pypi.org/project/open-wallet-standard/)
 
 ## Install

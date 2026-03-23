@@ -1,6 +1,8 @@
 # Key Isolation
 
-> How OWS reduces private-key exposure to agents, LLMs, logs, and local process risks.
+> Optional deployment guidance for reducing private-key exposure to agents, logs, and local process risks.
+
+This document describes recommended implementation strategies and deployment profiles rather than a single mandatory architecture.
 
 ## Current Architecture
 

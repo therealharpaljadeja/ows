@@ -1,20 +1,6 @@
-# 07 - Supported Chains
+# Supported Chains
 
-> Canonical reference for all chains supported by OWS: identifiers, derivation paths, address formats, RPC endpoints, and asset identification.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| CAIP-2 chain ID parsing (`namespace:reference`) | Done | `ows-core/src/caip.rs` |
-| CAIP-10 account IDs (`chain_id:address`) | Done | Stored in wallet `account_id` field |
-| Registered chain families (9 families, 15 networks) | Done | `ows-core/src/chain.rs` |
-| Per-chain signers (EVM, Solana, Sui, Bitcoin, Cosmos, Tron, TON, Spark, Filecoin) | Done | `ows-signer/src/chains/` |
-| HD derivation: BIP-32 (secp256k1) + SLIP-10 (ed25519) | Done | `ows-signer/src/hd.rs` |
-| Default RPC endpoints | Done | `ows-core/src/config.rs` |
-| User RPC overrides via config | Done | Merge semantics |
-| Shorthand aliases (e.g. `ethereum` → `eip155:1`) | Done | `parse_chain()` in CLI |
-| Asset identification (`chain_id:contract` / `native`) | Not started | No asset ID scheme |
+> Canonical reference for OWS chain families, identifiers, derivation paths, and address formats.
 
 ## Identifier Types
 
@@ -55,56 +41,34 @@ OWS groups chains into families that share a cryptographic curve and address der
 
 ## Known Networks
 
-Each network has a CAIP-2 chain ID and a default public RPC endpoint.
+Each network has a canonical chain identifier. Endpoint discovery and transport configuration are implementation-specific and are therefore out of scope for the core specification.
 
 ### EVM Networks
 
-| Name | CAIP-2 Chain ID | Default RPC URL |
-|---|---|---|
-| Ethereum | `eip155:1` | `https://eth.llamarpc.com` |
-| Polygon | `eip155:137` | `https://polygon-rpc.com` |
-| Arbitrum | `eip155:42161` | `https://arb1.arbitrum.io/rpc` |
-| Optimism | `eip155:10` | `https://mainnet.optimism.io` |
-| Base | `eip155:8453` | `https://mainnet.base.org` |
-| BSC | `eip155:56` | `https://bsc-dataseed.binance.org` |
-| Avalanche | `eip155:43114` | `https://api.avax.network/ext/bc/C/rpc` |
+| Name | CAIP-2 Chain ID |
+|---|---|
+| Ethereum | `eip155:1` |
+| Polygon | `eip155:137` |
+| Arbitrum | `eip155:42161` |
+| Optimism | `eip155:10` |
+| Base | `eip155:8453` |
+| BSC | `eip155:56` |
+| Avalanche | `eip155:43114` |
 
 ### Non-EVM Networks
 
-| Name | CAIP-2 Chain ID | Default RPC URL |
-|---|---|---|
-| Solana | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | `https://api.mainnet-beta.solana.com` |
-| Bitcoin | `bip122:000000000019d6689c085ae165831e93` | `https://mempool.space/api` |
-| Cosmos | `cosmos:cosmoshub-4` | `https://cosmos-rest.publicnode.com` |
-| Tron | `tron:mainnet` | `https://api.trongrid.io` |
-| TON | `ton:mainnet` | `https://toncenter.com/api/v2` |
-| Sui | `sui:mainnet` | `https://fullnode.mainnet.sui.io:443` |
-| Spark | `spark:mainnet` | — |
-| Filecoin | `fil:mainnet` | `https://api.node.glif.io/rpc/v1` |
+| Name | CAIP-2 Chain ID |
+|---|---|
+| Solana | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` |
+| Bitcoin | `bip122:000000000019d6689c085ae165831e93` |
+| Cosmos | `cosmos:cosmoshub-4` |
+| Tron | `tron:mainnet` |
+| TON | `ton:mainnet` |
+| Sui | `sui:mainnet` |
+| Spark | `spark:mainnet` |
+| Filecoin | `fil:mainnet` |
 
-Default endpoints are public, rate-limited, and suitable for development.
-
-## RPC Configuration
-
-Override default endpoints in `~/.ows/config.json`:
-
-```json
-{
-  "rpc": {
-    "eip155:1": "https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY",
-    "eip155:8453": "https://mainnet.base.org",
-    "eip155:84532": "https://sepolia.base.org"
-  }
-}
-```
-
-User overrides are merged on top of built-in defaults — you only need to specify chains you want to change or add.
-
-**Resolution order** when broadcasting:
-
-1. `--rpc-url` CLI flag (or `rpcUrl` API parameter) — highest priority
-2. `~/.ows/config.json` user override
-3. Built-in default
+Implementations MAY ship convenience endpoint defaults, but those defaults are deployment choices rather than OWS interoperability requirements.
 
 ## Shorthand Aliases
 
@@ -155,11 +119,11 @@ A single mnemonic derives accounts across all supported chains. The wallet file 
 
 ## Adding a New Chain
 
-1. Implement the `ChainSigner` trait (`deriveAddress`, `sign`, `signMessage`)
-2. Register a CAIP-2 namespace (if not already registered at [chainagnostic.org](https://chainagnostic.org))
-3. Specify the BIP-44 coin type (from [SLIP-44](https://github.com/satoshilabs/slips/blob/master/slip-0044.md))
-4. Add a default RPC endpoint to `Config::default_rpc()`
-5. Add the chain to the `KNOWN_CHAINS` registry
+1. Define a canonical chain identifier, preferably using CAIP-2.
+2. Specify the derivation path and coin type, if applicable.
+3. Specify the address encoding and checksum behavior.
+4. Define the signing and message-signing behavior required by `02-signing-interface.md`.
+5. Document any transaction serialization rules needed to produce deterministic signatures.
 
 No changes to OWS core, the signing interface, or the policy engine are needed.
 

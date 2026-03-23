@@ -1,49 +1,6 @@
-# 06 - Wallet Lifecycle
+# Wallet Lifecycle
 
 > How wallets are created, imported, exported, backed up, recovered, and migrated.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Create from new mnemonic | Done | `create_wallet()` in CLI + bindings |
-| Create from existing private key | Done | `import_wallet_private_key()` |
-| Import: BIP-39 mnemonic | Done | `import_wallet_mnemonic()` |
-| Import: Ethereum Keystore v3 | Not started | No v3 import logic |
-| Import: WIF (Bitcoin) | Not started | |
-| Import: Solana keypair JSON | Not started | |
-| Import: Sui keystore JSON | Not started | |
-| Export: mnemonic / private key | Done | `export_wallet()` |
-| Export: Keystore v3 format | Not started | |
-| Backup: encrypted tar.gz (`ows backup`) | Not started | `BackupConfig` struct exists but unused |
-| Restore from backup (`ows restore`) | Not started | |
-| Automated backup scheduling | Not started | Config field exists but unused |
-| Recovery with BIP-44 gap limit scanning | Not started | No `ows wallet recover` command |
-| Deletion: basic file removal | Done | `delete_wallet()` |
-| Deletion: secure overwrite with random bytes before unlink | Not started | Uses plain `fs::remove_file()` |
-| Deletion: remove wallet from API key `wallet_ids` | Not started | No API key system |
-| Key rotation (`ows wallet rotate`) | Not started | |
-| Wallet discovery with glob/policy filtering | Not started | Basic `list_wallets()` only |
-| Rename wallet | Done | `rename_wallet()` |
-| `--confirm` flag for destructive operations | Done | CLI prompts for confirmation |
-
-## Design Decision
-
-**OWS defines a complete wallet lifecycle with explicit operations for creation, import (from existing standards), export (to portable formats), backup, and recovery. All lifecycle operations maintain the same key isolation guarantees as signing — private key material is decrypted only when needed and immediately wiped after use.**
-
-### Why Lifecycle Matters for Agent Wallets
-
-Agent wallets have different lifecycle needs than human wallets:
-
-| Concern | Human Wallet | Agent Wallet |
-|---|---|---|
-| Creation | Manual, infrequent | Automated, potentially frequent (per-agent or per-task) |
-| Backup | User responsibility | Must be systematic and automated |
-| Recovery | Seed phrase on paper | Must be programmatic |
-| Migration | Rare (wallet switching) | Common (infra changes, key rotation) |
-| Deletion | Rare | Regular (agent decommissioning) |
-
-OWS must support both patterns.
 
 ## Creation
 
@@ -332,6 +289,4 @@ ows wallet list --name "agent-*"
 - [BIP-39: Mnemonic Generation](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki)
 - [BIP-44: Gap Limit](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki)
 - [Ethereum Keystore v3](https://ethereum.org/developers/docs/data-structures-and-encoding/web3-secret-storage)
-- [Privy: Key Export](https://docs.privy.io/wallets/overview)
-- [W3C Universal Wallet: import/export](https://w3c-ccg.github.io/universal-wallet-interop-spec/)
 - [Solana CLI Keypair Format](https://docs.solanalabs.com/cli/wallets/file-system)

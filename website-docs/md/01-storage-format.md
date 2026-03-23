@@ -1,6 +1,8 @@
 # Storage Format
 
-> How wallets are encrypted, structured, and stored on the local filesystem.
+> The storage format is the core of the OWS standard. It defines how wallets, API keys, and policies are encrypted and stored on the local filesystem. Everything else — signing, policy enforcement, language bindings — operates on these files.
+
+OWS extends the Ethereum Keystore v3 format with per-chain type adaptations, stored in a well-known directory with strict filesystem permissions. Any implementation that reads and writes these files correctly is a conforming OWS implementation.
 
 ## Vault Directory Structure
 

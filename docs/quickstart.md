@@ -1,6 +1,8 @@
-# Quickstart
+# Reference Implementation Quickstart
 
-> Get an agent signing transactions and paying for services in under five minutes.
+> Non-normative setup guide for the current OWS reference implementation.
+
+This document is not part of the core OWS specification. It describes one implementation's installer, CLI workflows, SDK package names, and service-payment integrations.
 
 ## Install
 

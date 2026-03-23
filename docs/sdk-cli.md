@@ -2,6 +2,8 @@
 
 > Command-line interface for managing wallets, signing, and key operations.
 
+This document is non-normative reference implementation documentation. CLI syntax does not define the OWS standard.
+
 ## Install
 
 ```bash

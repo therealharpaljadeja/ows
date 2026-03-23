@@ -2,6 +2,8 @@
 
 > Native bindings for Node.js via NAPI. No CLI, no server, no subprocess &mdash; the Rust core runs in-process.
 
+This document is non-normative reference implementation documentation. Package names and function signatures here do not define the OWS standard.
+
 [![npm](https://img.shields.io/npm/v/@open-wallet-standard/core)](https://www.npmjs.com/package/@open-wallet-standard/core)
 
 ## Install

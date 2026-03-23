@@ -130,13 +130,23 @@ Agent / CLI / App
 
 The full spec lives in [`docs/`](docs/) and at [openwallet.sh](https://openwallet.sh):
 
-1. [Storage Format](docs/01-storage-format.md) — Vault layout, Keystore v3, filesystem permissions
-2. [Signing Interface](docs/02-signing-interface.md) — sign, signAndSend, signMessage operations
-3. [Policy Engine](docs/03-policy-engine.md) — Pre-signing transaction policies
-4. [Agent Access Layer](docs/04-agent-access-layer.md) — Native language bindings and agent access
-5. [Key Isolation](docs/05-key-isolation.md) — Current in-process hardening and future isolation options
-6. [Wallet Lifecycle](docs/06-wallet-lifecycle.md) — Creation, recovery, deletion
-7. [Supported Chains](docs/07-supported-chains.md) — Chain families, CAIP identifiers, RPC endpoints
+1. [Specification](docs/00-specification.md) — Scope, document classes, conformance, and extensions
+2. [Storage Format](docs/01-storage-format.md) — Vault layout, keystore schema, filesystem permissions
+3. [Signing Interface](docs/02-signing-interface.md) — Sign, signAndSend, signMessage operations
+4. [Policy Engine](docs/03-policy-engine.md) — Pre-signing transaction policies
+5. [Agent Access Layer](docs/04-agent-access-layer.md) — Optional access profiles above the core spec
+6. [Key Isolation](docs/05-key-isolation.md) — Optional deployment guidance for key isolation
+7. [Wallet Lifecycle](docs/06-wallet-lifecycle.md) — Creation, recovery, deletion, and rotation
+8. [Supported Chains](docs/07-supported-chains.md) — Chain families, canonical identifiers, and derivation rules
+9. [Conformance and Security](docs/08-conformance-and-security.md) — Interop testing and security requirements
+
+Reference implementation documentation:
+
+- [Quickstart](docs/quickstart.md)
+- [CLI Reference](docs/sdk-cli.md)
+- [Node.js SDK](docs/sdk-node.md)
+- [Python SDK](docs/sdk-python.md)
+- [Policy Engine Implementation Guide](docs/policy-engine-implementation.md)
 
 ## License
 

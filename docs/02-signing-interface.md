@@ -46,34 +46,14 @@ interface SignAndSendResult {
 }
 ```
 
-The signer implementation handles transaction encoding and broadcasting via the resolved RPC endpoint. Current implementations do not wait for confirmations or return a richer status object.
+The signer implementation handles transaction encoding and submission through an implementation-defined transport. `rpcUrl` is an optional endpoint override for surfaces that support direct endpoint selection.
 
-#### CLI: `ows sign send-tx`
+An implementation that exposes `signAndSend`:
 
-The `ows sign send-tx` command provides sign-and-broadcast from the command line:
-
-```bash
-ows sign send-tx \
-  --chain evm \
-  --wallet agent-treasury \
-  --tx 0x<hex-encoded-unsigned-tx> \
-  --index 0 \
-  --rpc-url https://eth-sepolia.g.alchemy.com/v2/demo   # optional override
-```
-
-The command signs the transaction using the wallet's encrypted secret, resolves the RPC endpoint (flag > config override > built-in default), broadcasts via the chain-appropriate protocol, and prints the transaction hash. Use `--json` for structured output including `tx_hash` and `chain`.
-
-Per-chain broadcast protocols:
-
-| Chain | Broadcast Method |
-|---|---|
-| EVM | JSON-RPC `eth_sendRawTransaction` |
-| Solana | JSON-RPC `sendTransaction` (base64-encoded) |
-| Bitcoin | POST raw hex to `{rpc}/tx` (mempool.space REST) |
-| Cosmos | POST to `{rpc}/cosmos/tx/v1beta1/txs` (base64 tx_bytes) |
-| Tron | POST to `{rpc}/wallet/broadcasthex` |
-| TON | POST to `{rpc}/sendBoc` |
-| Sui | JSON-RPC `sui_executeTransactionBlock` (base64 tx + sig) |
+- MUST perform the same authentication and policy checks as `sign`
+- MUST return a stable transaction identifier when the broadcast succeeds
+- MUST fail clearly if the target transport is unavailable or unsupported
+- MAY expose richer transport metadata in implementation-specific fields
 
 ### `signMessage(request: SignMessageRequest): Promise<SignMessageResult>`
 
@@ -137,7 +117,7 @@ Returns a `SignMessageResult` with the signature and recovery ID. Only supported
 
 ## Serialized Transaction Format
 
-Current OWS implementations accept **already-serialized transaction bytes encoded as hex**. OWS signs those bytes, and for broadcast-capable chains it encodes the signed transaction into the wire format expected by the chain RPC.
+Current OWS implementations accept **already-serialized transaction bytes encoded as hex**. OWS signs those bytes, and `signAndSend` implementations submit the signed payload using the transport required by the target chain.
 
 ## Error Handling
 

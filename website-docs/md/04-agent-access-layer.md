@@ -1,171 +1,118 @@
-# 04 - Agent Access Layer
+# Agent Access Layer
 
-> How AI agents, CLI tools, and applications access OWS wallets through native language bindings.
+> Optional access profiles for exposing OWS functionality to applications, agents, CLIs, and local services.
 
-## Implementation Status
+This document is part of the OWS architecture, but it is not a package-level API reference. Concrete SDK names, installer commands, transport details, and language-specific function signatures are non-normative and belong in reference implementation documentation.
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| `generate_mnemonic(words?)` | Done | 12 or 24 words |
-| `derive_address(mnemonic, chain, index?)` | Done | |
-| `create_wallet(name, passphrase?, words?, ...)` | Done | |
-| `import_wallet_mnemonic(...)` | Done | |
-| `import_wallet_private_key(...)` | Done | |
-| `list_wallets(vault_path?)` | Done | |
-| `get_wallet(name_or_id, vault_path?)` | Done | |
-| `delete_wallet(name_or_id, vault_path?)` | Done | |
-| `export_wallet(name_or_id, passphrase, ...)` | Done | |
-| `rename_wallet(name_or_id, new_name, ...)` | Done | |
-| `sign_transaction(...)` | Done | |
-| `sign_message(...)` | Done | |
-| `sign_and_send(...)` | Done | |
-| Node.js NAPI bindings | Done | `bindings/node/src/lib.rs` |
-| Python PyO3 bindings | Done | `bindings/python/src/lib.rs` |
-| Token-based signing (credential = passphrase or `ows_key_...` token) | Done | CLI and bindings route through `ows-lib`; token-based typed-data signing is the remaining exception |
-| Policy evaluation on agent requests | Done | Enforced in `ows-lib` before API-token decryption |
-| API key management (`create_api_key`, `list_api_keys`, `revoke_api_key`) | Done | Available in CLI and Node/Python bindings |
-| Policy management (`create_policy`, `list_policies`, `get_policy`, `delete_policy`) | Done | Available in CLI and Node/Python bindings |
-| MCP server | Not started | |
-| Audit logging from bindings (not just CLI) | Not started | Only CLI logs to audit |
+## Purpose
 
-## Design Decision
+The OWS core specification defines stored artifacts, signing semantics, policy evaluation, wallet lifecycle behavior, and chain identifiers. Implementations may expose those capabilities through different local access layers:
 
-**OWS exposes wallet operations through native language bindings backed by the core Rust implementation. Bindings call directly into the `ows-lib` crate via FFI — no HTTP server or subprocess is required. They are compiled native modules that run in-process.**
+- in-process language bindings
+- local subprocess execution
+- local RPC or daemon interfaces
+- CLI wrappers
 
-## Native Language Bindings
+Those surfaces MAY differ, but they MUST preserve the core OWS semantics.
 
-### Node.js (NAPI)
+## Required Access Capabilities
 
-```bash
-npm install @open-wallet-standard/core
-```
+An access layer is conforming only if it preserves the following capabilities from the core spec:
+
+| Capability | Requirement |
+|---|---|
+| Wallet selection | MUST identify the target wallet unambiguously by ID or implementation-defined stable alias |
+| Chain selection | MUST resolve the request to a canonical chain identifier before signing |
+| Credential handling | MUST distinguish owner credentials from API tokens without ambiguity |
+| Policy enforcement | MUST evaluate applicable policies before any token-backed secret is decrypted |
+| Error propagation | MUST surface core errors without rewriting a denial into a success or silent fallback |
+| Secret handling | MUST NOT expose decrypted mnemonic or private key material to the caller unless an explicit export operation is invoked |
+
+## Abstract Operations
+
+An implementation MAY choose any surface syntax, but it SHOULD expose operations equivalent to the following abstract methods:
 
 ```typescript
-import { createWallet, listWallets, signMessage, signTransaction, signAndSend } from "@open-wallet-standard/core";
-
-// Create a wallet
-const wallet = createWallet("agent-treasury", "my-passphrase");
-// => { id, name, accounts, createdAt }
-
-// List all wallets
-const wallets = listWallets();
-
-// Sign a message
-const sig = signMessage("agent-treasury", "evm", "hello", "my-passphrase");
-// => { signature, recoveryId? }
-
-// Sign and broadcast a transaction
-const result = signAndSend("agent-treasury", "evm", "<tx-hex>", "my-passphrase");
-// => { txHash }
+createWallet(request) -> WalletDescriptor
+importWallet(request) -> WalletDescriptor
+listWallets(request?) -> WalletDescriptor[]
+getWallet(request) -> WalletDescriptor
+deleteWallet(request) -> DeleteResult
+sign(request) -> SignResult
+signAndSend(request) -> SignAndSendResult
+signMessage(request) -> SignMessageResult
+signTypedData(request) -> SignMessageResult
+createPolicy(request) -> PolicyDescriptor
+listPolicies(request?) -> PolicyDescriptor[]
+getPolicy(request) -> PolicyDescriptor
+deletePolicy(request) -> DeleteResult
+createApiKey(request) -> ApiKeyCreationResult
+listApiKeys(request?) -> ApiKeyDescriptor[]
+revokeApiKey(request) -> DeleteResult
 ```
 
-### Python (PyO3)
+The abstract operations above define capability coverage only. They do not require any specific package name, function name, argument order, or transport encoding.
 
-```bash
-pip install open-wallet-standard
-```
+## Credential Semantics
 
-```python
-from ows import create_wallet, list_wallets, sign_message, sign_transaction, sign_and_send
+Access layers MUST preserve the credential semantics defined by the policy engine:
 
-# Create a wallet
-wallet = create_wallet("agent-treasury", "my-passphrase")
-# => {"id", "name", "accounts", "created_at"}
+- **Owner credential**: unlocks the wallet directly and bypasses policy checks.
+- **API token**: resolves to an API key, enforces the token's wallet scope, and evaluates all attached policies before decryption.
 
-# List all wallets
-wallets = list_wallets()
+If a surface accepts a single generic credential field, it MUST apply deterministic credential-type detection and MUST NOT guess in a way that could weaken policy enforcement.
 
-# Sign a message
-sig = sign_message("agent-treasury", "evm", "hello", "my-passphrase")
-# => {"signature", "recovery_id"}
+## Access Profiles
 
-# Sign and broadcast a transaction
-result = sign_and_send("agent-treasury", "evm", "<tx-hex>", "my-passphrase")
-# => {"tx_hash"}
-```
+### Profile A: In-Process Binding
 
-### Available Functions
+The caller links directly against an OWS implementation in the same process.
 
-Both bindings expose the same current surface:
+Requirements:
 
-| Function | Description |
-|---|---|
-| `generate_mnemonic(words?)` | Generate a BIP-39 mnemonic (12 or 24 words) |
-| `derive_address(mnemonic, chain, index?)` | Derive a chain-specific address from a mnemonic |
-| `create_wallet(name, passphrase?, words?, vault_path?)` | Create a new wallet (generates mnemonic, encrypts, saves) |
-| `import_wallet_mnemonic(name, mnemonic, passphrase?, index?, vault_path?)` | Import a wallet from a mnemonic |
-| `import_wallet_private_key(name, key_hex, chain?, passphrase?, vault_path?, secp256k1_key?, ed25519_key?)` | Import a wallet from a raw private key (or explicit per-curve keys) |
-| `list_wallets(vault_path?)` | List all wallets in the vault |
-| `get_wallet(name_or_id, vault_path?)` | Get a single wallet by name or ID |
-| `delete_wallet(name_or_id, vault_path?)` | Delete a wallet |
-| `export_wallet(name_or_id, passphrase, vault_path?)` | Export a wallet's secret (mnemonic or private key) |
-| `rename_wallet(name_or_id, new_name, vault_path?)` | Rename a wallet |
-| `sign_transaction(wallet, chain, tx_hex, passphrase, index?, vault_path?)` | Sign a transaction |
-| `sign_message(wallet, chain, message, passphrase, encoding?, index?, vault_path?)` | Sign a message |
-| `sign_typed_data(wallet, chain, typed_data_json, passphrase?, index?, vault_path?)` | Sign EIP-712 typed data (EVM only) |
-| `sign_and_send(wallet, chain, tx_hex, passphrase, index?, rpc_url?, vault_path?)` | Sign and broadcast a transaction |
-| `create_policy(json_str, vault_path?)` | Register a policy from a JSON string |
-| `list_policies(vault_path?)` | List all registered policies |
-| `get_policy(id, vault_path?)` | Load a single policy |
-| `delete_policy(id, vault_path?)` | Delete a policy |
-| `create_api_key(name, wallet_ids, policy_ids, passphrase, expires_at?, vault_path?)` | Create an API key and return `{ id, token, name }` |
-| `list_api_keys(vault_path?)` | List API keys (metadata only, no tokens) |
-| `revoke_api_key(id, vault_path?)` | Delete an API key file |
+- MUST preserve all core signing and policy semantics.
+- MUST zeroize decrypted secret material as soon as the operation completes.
+- SHOULD document that the application and signer share an address space.
 
-All functions operate on the default vault (`~/.ows/`) unless a custom `vault_path` is provided.
+### Profile B: Local Subprocess
 
-### Credential parameter
+The caller spawns an OWS child process per operation or per session.
 
-The `passphrase` parameter in signing functions accepts either a wallet passphrase **or** an API token:
+Requirements:
 
-- **Passphrase** (e.g., `"my-secret"`) → owner mode. Decrypts wallet directly via scrypt. No policy evaluation.
-- **API token** (e.g., `"ows_key_a1b2c3d4..."`) → agent mode. Looks up API key file, evaluates attached policies, decrypts via HKDF. Returns `PolicyDenied` error if policies block the request.
+- MUST provide authenticated request input to the child process.
+- MUST ensure that policy evaluation happens before token-backed secrets are decrypted.
+- SHOULD use structured request and response payloads.
 
-This means existing signing function signatures are unchanged for transaction and message signing — agents pass a token where the passphrase goes.
+### Profile C: Local Service
 
-> **Current limitation:** EIP-712 typed-data signing via API token is not yet supported. Owner-mode typed-data signing works; token-based typed-data signing currently returns an error.
+The caller communicates with a loopback-only daemon or local RPC endpoint.
 
-> **Note:** Because the bindings run in-process, key material is decrypted within the application's address space. For use cases where key isolation is critical, consider running OWS in a separate subprocess.
+Requirements:
 
-### Management functions
+- MUST bind only to local interfaces unless a stronger trust boundary is explicitly documented.
+- MUST authenticate callers or operating-system principals before performing owner or token-backed actions.
+- MUST map remote method names back to the core OWS operations without changing their semantics.
 
-Bindings also expose policy and API-key management directly:
+## Cross-Layer Consistency
 
-| Function | Description |
-|---|---|
-| `create_policy(json_str, vault_path?)` | Register a policy from a JSON string |
-| `list_policies(vault_path?)` | List all registered policies |
-| `get_policy(id, vault_path?)` | Load one policy by ID |
-| `delete_policy(id, vault_path?)` | Delete a policy |
-| `create_api_key(name, wallet_ids, policy_ids, passphrase, expires_at?, vault_path?)` | Create an API key. Returns `{ id, token, name }`. Token shown once. |
-| `list_api_keys(vault_path?)` | List API keys (metadata only, no tokens) |
-| `revoke_api_key(id, vault_path?)` | Delete an API key file |
+If an implementation offers multiple access layers, all of them MUST agree on:
 
-## Agent Interaction Example
+- wallet and API key lookup behavior
+- policy evaluation order
+- canonical error codes
+- chain identifier normalization
+- audit-log side effects
 
-Here's how an AI agent interacts with OWS through the bindings using an API token.
+An implementation MUST NOT make the CLI stricter or weaker than the SDK for the same operation unless the difference is explicitly documented as a surface-specific validation rule.
 
-```
-Setup (owner, one-time):
-  ows key create --name "claude-agent" --wallet agent-treasury --policy spending-limit
-  → Token: ows_key_a1b2c3d4e5f6...  (provisioned to agent)
+## Non-Normative Examples
 
-Agent: "I need to send 0.01 ETH to 0x4B08... on Base"
+The following are explicitly outside the scope of this document:
 
-1. Agent calls sign_and_send("agent-treasury", "base", "<tx-hex>", "ows_key_a1b2c3d4...")
-   → OWS detects ows_key_ prefix → agent mode
-   → SHA256(token) → looks up API key file
-   → Verifies "agent-treasury" is in key's wallet_ids
-   → Loads policies: ["spending-limit"]
-   → Evaluates attached policies
-   → HKDF(token) → decrypts mnemonic from key file
-   → Signs transaction, wipes key material
-   → Broadcasts to Base RPC
-   → Returns: { tx_hash: "0xabc..." }
-```
+- package names such as npm or PyPI artifacts
+- shell installer commands
+- generated client stubs
+- framework-specific wrappers
 
-At no point does the agent see the private key. The API token determines which wallets the agent can access, and the policies attached to the token constrain what operations are permitted.
-
-## References
-
-- [Privy Server Wallet REST API](https://docs.privy.io/guide/server-wallets/create)
+Those details may be documented in `sdk-cli.md`, `sdk-node.md`, and `sdk-python.md`, but they do not define the standard.
