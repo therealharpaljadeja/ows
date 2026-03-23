@@ -138,7 +138,7 @@ function scrollToHash() {
 async function loadDoc() {
   var params = new URLSearchParams(window.location.search);
   var slug = params.get('slug');
-  if (!slug) { window.location.href = './'; return; }
+  if (!slug || !/^[a-zA-Z0-9_-]+$/.test(slug)) { window.location.href = './'; return; }
 
   var doc = DOCS.find(function (d) { return d.slug === slug; });
   if (!doc) { window.location.href = './'; return; }
@@ -161,7 +161,7 @@ async function loadDoc() {
     addCopyButtons();
     scrollToHash();
   } catch (e) {
-    content.innerHTML = '<h1>Not Found</h1><p>Could not load <code>' + slug + '.md</code>.</p>';
+    content.innerHTML = '<h1>Not Found</h1><p>Could not load <code>' + slug.replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }) + '.md</code>.</p>';
   }
 }
 
