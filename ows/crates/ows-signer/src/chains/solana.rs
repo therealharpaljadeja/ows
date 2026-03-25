@@ -78,46 +78,24 @@ impl ChainSigner for SolanaSigner {
     }
 
     fn extract_signable_bytes<'a>(&self, tx_bytes: &'a [u8]) -> Result<&'a [u8], SignerError> {
-        // Solana serialized transaction format:
+        // Solana serialized transaction format (envelope):
         // [compact-u16: num_signatures] [64-byte signatures...] [message...]
         // Return only the message portion.
         //
-        // Also accepts raw message bytes (no envelope). We detect the format
-        // using two heuristics:
-        // 1. Unsigned envelopes have all-zero first sig slot
-        // 2. Signed envelopes satisfy the invariant: first byte of message
-        //    (num_required_signatures) equals the sig-slot count
+        // Input MUST be a full transaction envelope. Raw message bytes
+        // are not accepted — callers should always provide the serialized
+        // transaction as produced by Solana SDKs.
         if tx_bytes.is_empty() {
             return Err(SignerError::InvalidTransaction("empty transaction".into()));
         }
         let (num_sigs, header_len) = decode_compact_u16(tx_bytes)?;
-        if num_sigs == 0 {
-            let message_start = header_len;
-            return if tx_bytes.len() > message_start {
-                Ok(&tx_bytes[message_start..])
-            } else {
-                Ok(tx_bytes)
-            };
-        }
         let message_start = header_len + num_sigs * 64;
         if tx_bytes.len() <= message_start {
-            // Too short for the declared sig slots — input is likely raw
-            // message bytes whose first byte coincidentally looks like a
-            // sig count. Return as-is.
-            return Ok(tx_bytes);
+            return Err(SignerError::InvalidTransaction(
+                "transaction too short for declared signature slots".into(),
+            ));
         }
-        // Heuristic 1: first signature slot is all zeros (unsigned envelope)
-        let first_sig_end = header_len + 64;
-        let has_zero_first_sig = tx_bytes[header_len..first_sig_end].iter().all(|&b| b == 0);
-        // Heuristic 2: first byte of message matches sig count (Solana invariant)
-        let msg_header_matches = tx_bytes[message_start] as usize == num_sigs;
-
-        if has_zero_first_sig || msg_header_matches {
-            Ok(&tx_bytes[message_start..])
-        } else {
-            // Doesn't look like a valid envelope — treat as raw message
-            Ok(tx_bytes)
-        }
+        Ok(&tx_bytes[message_start..])
     }
 
     fn encode_signed_transaction(
@@ -191,13 +169,43 @@ mod tests {
     }
 
     /// Build a synthetic Solana serialized transaction with the given number
-    /// of signature slots and message payload.
-    fn build_tx(num_sigs: u16, message: &[u8]) -> Vec<u8> {
+    /// of signature slots and a structurally valid message containing the
+    /// given payload as instruction data.
+    fn build_tx(num_sigs: u16, payload: &[u8]) -> Vec<u8> {
         let mut tx = encode_compact_u16(num_sigs);
         // Fill signature slots with zeros (placeholders)
         tx.extend(std::iter::repeat_n(0u8, num_sigs as usize * 64));
-        tx.extend_from_slice(message);
+        // Structurally valid Solana message header
+        let ns = if num_sigs == 0 { 1 } else { num_sigs as u8 };
+        tx.extend_from_slice(&[ns, 0x00, 0x01]); // required_sigs, ro_signed, ro_unsigned
+        tx.push(0x02); // num_account_keys (compact-u16 = 2)
+        tx.extend_from_slice(&[0xAA; 32]); // account key 1
+        tx.extend_from_slice(&[0x00; 32]); // account key 2 (system program)
+        tx.extend_from_slice(&[0xCC; 32]); // recent blockhash
+                                           // Instruction referencing the payload
+        tx.push(0x01); // num_instructions
+        tx.push(0x01); // program_id_index
+        tx.push(0x01); // num_accounts
+        tx.push(0x00); // account index 0
+        tx.push(payload.len() as u8); // data_length
+        tx.extend_from_slice(payload);
         tx
+    }
+
+    /// Return the expected message bytes for a build_tx output.
+    fn expected_msg(num_sigs: u16, payload: &[u8]) -> Vec<u8> {
+        let ns = if num_sigs == 0 { 1 } else { num_sigs as u8 };
+        let mut msg = vec![ns, 0x00, 0x01, 0x02];
+        msg.extend_from_slice(&[0xAA; 32]);
+        msg.extend_from_slice(&[0x00; 32]);
+        msg.extend_from_slice(&[0xCC; 32]);
+        msg.push(0x01);
+        msg.push(0x01);
+        msg.push(0x01);
+        msg.push(0x00);
+        msg.push(payload.len() as u8);
+        msg.extend_from_slice(payload);
+        msg
     }
 
     #[test]
@@ -295,14 +303,9 @@ mod tests {
     #[test]
     fn test_extract_signable_bytes() {
         let signer = SolanaSigner;
-
-        // Build a minimal Solana serialized tx: [1 sig slot] [64 zero bytes] [message]
-        let mut tx_bytes = vec![0x01]; // 1 signature slot
-        tx_bytes.extend_from_slice(&[0u8; 64]); // placeholder zero signature
-        tx_bytes.extend_from_slice(b"fake_message_payload");
-
-        let signable = signer.extract_signable_bytes(&tx_bytes).unwrap();
-        assert_eq!(signable, b"fake_message_payload");
+        let tx = build_tx(1, b"payload");
+        let signable = signer.extract_signable_bytes(&tx).unwrap();
+        assert_eq!(signable, expected_msg(1, b"payload").as_slice());
     }
 
     #[test]
@@ -314,14 +317,12 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_signable_bytes_too_short_falls_back() {
+    fn test_extract_signable_bytes_too_short_errors() {
         let signer = SolanaSigner;
 
-        // Claims 1 sig slot but too short — falls back to returning as-is
-        // (the input is likely raw message bytes, not a truncated envelope)
+        // Claims 1 sig slot but too short
         let short = vec![0x01, 0x00];
-        let result = signer.extract_signable_bytes(&short).unwrap();
-        assert_eq!(result, &[0x01, 0x00]);
+        assert!(signer.extract_signable_bytes(&short).is_err());
     }
 
     #[test]
@@ -344,14 +345,13 @@ mod tests {
             hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
                 .unwrap();
         let signer = SolanaSigner;
-
-        // Build a minimal Solana serialized tx: [1 sig slot] [64 zero bytes] [message]
-        let mut tx_bytes = vec![0x01]; // 1 signature slot
-        tx_bytes.extend_from_slice(&[0u8; 64]); // placeholder zero signature
-        tx_bytes.extend_from_slice(b"fake_message_payload");
+        let tx_bytes = build_tx(1, b"pipeline");
+        let expected = expected_msg(1, b"pipeline");
 
         // Pipeline: extract → sign → encode (mirrors sign_and_send in ops.rs)
         let signable = signer.extract_signable_bytes(&tx_bytes).unwrap();
+        assert_eq!(signable, expected.as_slice());
+
         let output = signer.sign_transaction(&privkey, signable).unwrap();
         let signed = signer
             .encode_signed_transaction(&tx_bytes, &output)
@@ -364,12 +364,11 @@ mod tests {
         assert_eq!(signed.len(), tx_bytes.len());
 
         // Verify the signature is over the message portion
-        let message = &tx_bytes[65..];
         let signing_key = SigningKey::from_bytes(&privkey.try_into().unwrap());
         let verifying_key = signing_key.verifying_key();
         let sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
         verifying_key
-            .verify(message, &sig)
+            .verify(&expected, &sig)
             .expect("signature should verify against the message portion only");
     }
 
@@ -420,16 +419,12 @@ mod tests {
 
     #[test]
     fn test_extract_then_sign_produces_valid_signature() {
-        // The correct pipeline: extract → sign → verify
         let privkey =
             hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
                 .unwrap();
         let signer = SolanaSigner;
-
-        let message = b"correct pipeline test";
-        let mut full_tx = vec![0x01];
-        full_tx.extend_from_slice(&[0u8; 64]);
-        full_tx.extend_from_slice(message);
+        let full_tx = build_tx(1, b"correct pipeline");
+        let expected = expected_msg(1, b"correct pipeline");
 
         let signable = signer.extract_signable_bytes(&full_tx).unwrap();
         let output = signer.sign_transaction(&privkey, signable).unwrap();
@@ -438,33 +433,24 @@ mod tests {
         let verifying_key = signing_key.verifying_key();
         let sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
         verifying_key
-            .verify(message, &sig)
+            .verify(&expected, &sig)
             .expect("extract → sign should produce a valid signature over the message");
     }
 
     #[test]
     fn test_extract_signable_bytes_with_multiple_sig_slots() {
         let signer = SolanaSigner;
-
-        // 2 signature slots
-        let mut tx = vec![0x02]; // 2 sig slots
-        tx.extend_from_slice(&[0u8; 128]); // 2 × 64 bytes
-        tx.extend_from_slice(b"multi_sig_message");
-
+        let tx = build_tx(2, b"multi");
         let signable = signer.extract_signable_bytes(&tx).unwrap();
-        assert_eq!(signable, b"multi_sig_message");
+        assert_eq!(signable, expected_msg(2, b"multi").as_slice());
     }
 
     #[test]
     fn test_extract_signable_bytes_with_three_sig_slots() {
         let signer = SolanaSigner;
-
-        let mut tx = vec![0x03]; // 3 sig slots
-        tx.extend_from_slice(&[0u8; 192]); // 3 × 64 bytes
-        tx.extend_from_slice(b"three_sig_msg");
-
+        let tx = build_tx(3, b"three");
         let signable = signer.extract_signable_bytes(&tx).unwrap();
-        assert_eq!(signable, b"three_sig_msg");
+        assert_eq!(signable, expected_msg(3, b"three").as_slice());
     }
 
     #[test]
@@ -499,29 +485,25 @@ mod tests {
             hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
                 .unwrap();
         let signer = SolanaSigner;
-
-        let message = b"multi_slot_pipeline";
-        let mut tx = vec![0x02]; // 2 sig slots
-        tx.extend_from_slice(&[0u8; 64]); // first (ours)
-        tx.extend_from_slice(&[0xCC; 64]); // second (other signer)
-        tx.extend_from_slice(message);
+        let tx = build_tx(2, b"multi_slot");
+        let expected = expected_msg(2, b"multi_slot");
 
         let signable = signer.extract_signable_bytes(&tx).unwrap();
+        assert_eq!(signable, expected.as_slice());
+
         let output = signer.sign_transaction(&privkey, signable).unwrap();
         let signed = signer.encode_signed_transaction(&tx, &output).unwrap();
 
         // Verify structure
         assert_eq!(signed[0], 0x02); // num_sigs preserved
         assert_eq!(&signed[1..65], &output.signature[..]); // our sig
-        assert_eq!(&signed[65..129], &[0xCC; 64]); // other sig preserved
-        assert_eq!(&signed[129..], message); // message preserved
 
         // Verify signature correctness
         let signing_key = SigningKey::from_bytes(&privkey.try_into().unwrap());
         let verifying_key = signing_key.verifying_key();
         let sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
         verifying_key
-            .verify(message, &sig)
+            .verify(&expected, &sig)
             .expect("signature should verify against the message portion");
     }
 
@@ -599,8 +581,10 @@ mod tests {
         assert_eq!(header_len, 2);
 
         let signable = signer.extract_signable_bytes(&tx).unwrap();
+        let expected = expected_msg(128, b"MSG");
         assert_eq!(
-            signable, message,
+            signable,
+            expected.as_slice(),
             "with 128 sig slots (2-byte compact-u16), message extraction must \
              account for the extra header byte"
         );
@@ -609,21 +593,18 @@ mod tests {
     #[test]
     fn test_extract_signable_127_vs_128_boundary() {
         let signer = SolanaSigner;
-        let message = b"BOUNDARY";
 
-        // 127 sigs → 1-byte header
-        let tx_127 = build_tx(127, message);
+        let tx_127 = build_tx(127, b"BND");
         assert_eq!(
             signer.extract_signable_bytes(&tx_127).unwrap(),
-            message,
+            expected_msg(127, b"BND").as_slice(),
             "127 sigs (1-byte header) should extract correctly"
         );
 
-        // 128 sigs → 2-byte header
-        let tx_128 = build_tx(128, message);
+        let tx_128 = build_tx(128, b"BND");
         assert_eq!(
             signer.extract_signable_bytes(&tx_128).unwrap(),
-            message,
+            expected_msg(128, b"BND").as_slice(),
             "128 sigs (2-byte header) should extract correctly"
         );
     }
@@ -631,26 +612,27 @@ mod tests {
     #[test]
     fn test_extract_signable_255_sig_slots() {
         let signer = SolanaSigner;
-        let message = b"255SIGS";
-        let tx = build_tx(255, message);
-        assert_eq!(signer.extract_signable_bytes(&tx).unwrap(), message);
+        let tx = build_tx(255, b"255");
+        assert_eq!(
+            signer.extract_signable_bytes(&tx).unwrap(),
+            expected_msg(255, b"255").as_slice()
+        );
     }
 
     #[test]
     fn test_extract_signable_256_sig_slots() {
         let signer = SolanaSigner;
-        let message = b"256SIGS";
-        let tx = build_tx(256, message);
-        assert_eq!(signer.extract_signable_bytes(&tx).unwrap(), message);
+        let tx = build_tx(256, b"256");
+        assert_eq!(
+            signer.extract_signable_bytes(&tx).unwrap(),
+            expected_msg(256, b"256").as_slice()
+        );
     }
 
     #[test]
     fn test_encode_signed_tx_128_sig_slots() {
-        // Verify encode_signed_transaction places the signature at the
-        // correct offset when the compact-u16 header is 2 bytes.
         let signer = SolanaSigner;
-        let message = b"ENCODE128";
-        let tx = build_tx(128, message);
+        let tx = build_tx(128, b"ENC");
 
         let fake_sig = SignOutput {
             signature: vec![0xAA; 64],
@@ -661,50 +643,34 @@ mod tests {
         let signed = signer.encode_signed_transaction(&tx, &fake_sig).unwrap();
         let header_len = encode_compact_u16(128).len(); // 2
 
-        // First sig slot starts at header_len, not 1
         assert_eq!(
             &signed[header_len..header_len + 64],
             &[0xAA; 64],
             "first sig slot must start after the 2-byte compact-u16 header"
         );
-
-        // Second sig slot should be untouched (still zeros)
-        assert_eq!(
-            &signed[header_len + 64..header_len + 128],
-            &[0u8; 64],
-            "second sig slot should be unchanged"
-        );
-
-        // Message should be preserved
-        let msg_start = header_len + 128 * 64;
-        assert_eq!(&signed[msg_start..], message);
-
-        // Total length unchanged
         assert_eq!(signed.len(), tx.len());
     }
 
     #[test]
     fn test_full_pipeline_128_sig_slots() {
-        // End-to-end: extract → sign → encode → verify with 128 sig slots
         let privkey =
             hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
                 .unwrap();
         let signer = SolanaSigner;
-        let message = b"pipeline128";
-        let tx = build_tx(128, message);
+        let tx = build_tx(128, b"p128");
+        let expected = expected_msg(128, b"p128");
 
         let signable = signer.extract_signable_bytes(&tx).unwrap();
-        assert_eq!(signable, message);
+        assert_eq!(signable, expected.as_slice());
 
         let output = signer.sign_transaction(&privkey, signable).unwrap();
         let _signed = signer.encode_signed_transaction(&tx, &output).unwrap();
 
-        // Verify the signature
         let signing_key = SigningKey::from_bytes(&privkey.try_into().unwrap());
         let verifying_key = signing_key.verifying_key();
         let sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
         verifying_key
-            .verify(message, &sig)
+            .verify(&expected, &sig)
             .expect("signature should verify against the message portion");
     }
 
@@ -722,151 +688,44 @@ mod tests {
 
     #[test]
     fn test_extract_signable_0_sig_slots() {
-        // 0 sigs → header is [0x00], message starts at byte 1
-        // This is technically valid for extraction (no sigs to skip)
+        // 0 sigs → message_start = header_len (just the compact-u16 byte)
         let signer = SolanaSigner;
         let tx = build_tx(0, b"ZEROSIGS");
         let signable = signer.extract_signable_bytes(&tx).unwrap();
-        assert_eq!(signable, b"ZEROSIGS");
+        assert_eq!(signable, expected_msg(0, b"ZEROSIGS").as_slice());
     }
 
     #[test]
-    fn test_extract_signable_truncated_tx_multi_byte_header_falls_back() {
+    fn test_extract_signable_truncated_tx_errors() {
         let signer = SolanaSigner;
-        // 128 sigs claimed but only a few bytes of data — falls back to as-is
+        // 128 sigs claimed but only a few bytes of data
         let mut tx = encode_compact_u16(128);
         tx.extend_from_slice(&[0u8; 10]);
-        let result = signer.extract_signable_bytes(&tx).unwrap();
-        assert_eq!(
-            result,
-            tx.as_slice(),
-            "too-short input should fall back to raw bytes"
-        );
-    }
-
-    // ================================================================
-    // Envelope detection: raw message passthrough
-    // ================================================================
-
-    #[test]
-    fn test_extract_raw_message_bytes_passthrough() {
-        // A raw Solana message (no envelope) should pass through unchanged.
-        // The message starts with [num_required_sigs=1, num_readonly_signed=0,
-        // num_readonly_unsigned=1, num_accounts=2, ...].
-        // extract_signable_bytes should detect this is NOT an envelope
-        // because tx_bytes[65] != 1.
-        let signer = SolanaSigner;
-
-        let mut raw_msg = vec![
-            0x01, // num_required_signatures
-            0x00, // num_readonly_signed_accounts
-            0x01, // num_readonly_unsigned_accounts
-            0x02, // num_account_keys
-        ];
-        raw_msg.extend_from_slice(&[0xAA; 32]); // account key 1
-        raw_msg.extend_from_slice(&[0xBB; 32]); // account key 2
-        raw_msg.extend_from_slice(&[0xCC; 32]); // recent blockhash
-        raw_msg.push(0x01); // num_instructions
-        raw_msg.extend_from_slice(&[0x01, 0x02, 0x00, 0x01, 0x0C]); // instruction header
-        raw_msg.extend_from_slice(&[0u8; 12]); // instruction data
-
-        let result = signer.extract_signable_bytes(&raw_msg).unwrap();
-        assert_eq!(
-            result,
-            raw_msg.as_slice(),
-            "raw message bytes should pass through unchanged"
-        );
-    }
-
-    #[test]
-    fn test_extract_envelope_vs_raw_message_produce_same_signature() {
-        // Signing a full envelope and signing the equivalent raw message
-        // should produce the same signature.
-        let privkey =
-            hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
-                .unwrap();
-        let signer = SolanaSigner;
-
-        let message = b"envelope_vs_raw_test_msg_payload";
-
-        // Build full envelope
-        let mut envelope = vec![0x01]; // 1 sig slot
-        envelope.extend_from_slice(&[0u8; 64]); // placeholder sig
-                                                // Message starts with num_required_sigs = 1 (matches sig count)
-        envelope.push(0x01); // num_required_sigs
-        envelope.extend_from_slice(message);
-
-        // Build raw message (same content, no envelope)
-        let mut raw_msg = vec![0x01]; // num_required_sigs
-        raw_msg.extend_from_slice(message);
-
-        let env_signable = signer.extract_signable_bytes(&envelope).unwrap();
-        let raw_signable = signer.extract_signable_bytes(&raw_msg).unwrap();
-
-        // Both should extract to the same signable bytes
-        assert_eq!(
-            env_signable, raw_signable,
-            "envelope and raw should yield same signable bytes"
-        );
-
-        // And produce the same signature
-        let env_sig = signer.sign_transaction(&privkey, env_signable).unwrap();
-        let raw_sig = signer.sign_transaction(&privkey, raw_signable).unwrap();
-        assert_eq!(env_sig.signature, raw_sig.signature);
+        assert!(signer.extract_signable_bytes(&tx).is_err());
     }
 
     #[test]
     fn test_extract_presigned_envelope() {
-        // A pre-signed envelope (first sig slot non-zero) should still be
-        // detected via heuristic 2 (msg header matches sig count).
+        // A pre-signed envelope (first sig slot non-zero) should still
+        // extract correctly — only the compact-u16 header matters.
         let signer = SolanaSigner;
-
-        // Build envelope with non-zero first sig (simulating pre-signed tx)
+        let msg = expected_msg(1, b"presigned");
         let mut envelope = vec![0x01]; // 1 sig slot
         envelope.extend_from_slice(&[0xDD; 64]); // non-zero sig
-        envelope.push(0x01); // num_required_signatures = 1 (matches sig count)
-        envelope.extend_from_slice(b"presigned_test");
+        envelope.extend_from_slice(&msg);
 
         let signable = signer.extract_signable_bytes(&envelope).unwrap();
-        let mut expected = vec![0x01u8];
-        expected.extend_from_slice(b"presigned_test");
-        assert_eq!(
-            signable,
-            expected.as_slice(),
-            "pre-signed envelope should still be detected via msg header heuristic"
-        );
-    }
-
-    #[test]
-    fn test_extract_short_raw_message_passthrough() {
-        // Very short raw message (shorter than 1 sig slot + header)
-        let signer = SolanaSigner;
-        let raw_msg = vec![0x01, 0x00, 0x01, 0x02, 0xAA, 0xBB];
-        let result = signer.extract_signable_bytes(&raw_msg).unwrap();
-        assert_eq!(result, raw_msg.as_slice());
-    }
-
-    #[test]
-    fn test_extract_raw_message_starting_with_two() {
-        // Raw message with num_required_signatures=2
-        let signer = SolanaSigner;
-        let mut raw_msg = vec![0x02, 0x00, 0x01]; // 2 required sigs
-        raw_msg.extend_from_slice(&[0xAA; 100]); // some data
-        let result = signer.extract_signable_bytes(&raw_msg).unwrap();
-        assert_eq!(
-            result,
-            raw_msg.as_slice(),
-            "short raw message starting with 0x02 should pass through"
-        );
+        assert_eq!(signable, msg.as_slice());
     }
 
     #[test]
     fn test_build_tx_helper_produces_correct_layout() {
         // Sanity-check the test helper itself
         for num_sigs in [1u16, 2, 127, 128, 255, 256] {
-            let msg = b"VERIFY";
-            let tx = build_tx(num_sigs, msg);
+            let payload = b"VFY";
+            let tx = build_tx(num_sigs, payload);
             let header = encode_compact_u16(num_sigs);
+            let msg = expected_msg(num_sigs, payload);
             let expected_len = header.len() + num_sigs as usize * 64 + msg.len();
             assert_eq!(
                 tx.len(),
@@ -875,8 +734,8 @@ mod tests {
             );
             // Header bytes should match
             assert_eq!(&tx[..header.len()], &header[..]);
-            // Message should be at the end
-            assert_eq!(&tx[tx.len() - msg.len()..], msg);
+            // Message at the end should match expected_msg
+            assert_eq!(&tx[tx.len() - msg.len()..], msg.as_slice());
         }
     }
 }
