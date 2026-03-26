@@ -688,10 +688,144 @@ fn broadcast(chain: ChainType, rpc_url: &str, signed_bytes: &[u8]) -> Result<Str
             "broadcast not yet supported for Filecoin".into(),
         )),
         ChainType::Sui => broadcast_sui(rpc_url, signed_bytes),
-        ChainType::Xrpl => Err(OwsLibError::InvalidInput(
-            "broadcast not yet supported for XRPL (Phase 2)".into(),
-        )),
+        ChainType::Xrpl => broadcast_xrpl(rpc_url, signed_bytes),
     }
+}
+
+/*
+TODO: Remove this test script
+/**
+ * test-xrpl-ows-pipeline.mjs
+ *
+ * Signs an XRPL Payment transaction with xrpl.js and prints:
+ *  - the signed tx_blob
+ *  - the ready-to-run `ows sign send-tx` command
+ *
+ * OWS has been patched to bypass signing and call broadcast_signed directly,
+ * so passing the pre-signed blob lets us validate the XRPL submit path in
+ * isolation without the full sign → encode pipeline needing to be wired up.
+ *
+ * Usage:
+ *   node test-xrpl-ows-pipeline.mjs
+ *   # then paste and run the printed `ows sign send-tx` command
+ */
+
+import pkg from "./packages/xrpl/dist/npm/index.js";
+const { Wallet, Client } = pkg;
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const TESTNET_WSS = "wss://s.altnet.rippletest.net:51233";
+const OWS_WALLET_NAME = "xrpl-test"; // wallet name used during `ows wallet import`
+
+const PRIVATE_KEY =
+  "00AA83B3DC1205119B4B6F09CF9895C9359B56F5A81BB9BB0450C87BE041113B58";
+const PUBLIC_KEY =
+  "035D8892C99D4F17B2775EC428ED65B6335A5D588AC2057B81C8C38C59C72B68D9";
+
+const DESTINATION = "rLvm2sMyvqHbnBG21m5YXx3VSmZqfE2Do5";
+const AMOUNT_DROPS = "1000000"; // 1 XRP
+const FEE_DROPS = "12";
+
+// ── Wallet ────────────────────────────────────────────────────────────────────
+
+const wallet = new Wallet(PUBLIC_KEY, PRIVATE_KEY);
+console.log("Account (sender):", wallet.classicAddress);
+
+// ── Connect and fetch sequence ────────────────────────────────────────────────
+
+const client = new Client(TESTNET_WSS);
+await client.connect();
+
+const { result: accountResult } = await client.request({
+  command: "account_info",
+  account: wallet.classicAddress,
+  ledger_index: "current",
+});
+const sequence = accountResult.account_data.Sequence;
+console.log("Sequence:        ", sequence);
+
+// ── Build and sign with xrpl.js ───────────────────────────────────────────────
+
+const unsignedTx = {
+  TransactionType: "Payment",
+  Account: wallet.classicAddress,
+  Destination: DESTINATION,
+  Amount: AMOUNT_DROPS,
+  Fee: FEE_DROPS,
+  Sequence: sequence,
+  SigningPubKey: PUBLIC_KEY,
+};
+
+// wallet.sign() → { tx_blob: "<uppercase hex>", hash: "<tx hash>" }
+// tx_blob is the fully signed XRPL binary, ready for `submit`.
+const signed = wallet.sign(unsignedTx);
+
+await client.disconnect();
+
+console.log("\n=== xrpl.js signed output ===");
+console.log("tx_hash :", signed.hash);
+console.log("tx_blob :", signed.tx_blob);
+
+// OWS broadcast_xrpl calls hex::encode_upper internally, so pass lowercase hex
+// here — the bytes are identical either way.
+const txBlobLower = signed.tx_blob.toLowerCase();
+
+console.log("\n=== OWS CLI command (run after code changes + rebuild) ===");
+console.log(
+  `ows sign send-tx \\
+  --chain xrpl \\
+  --wallet ${OWS_WALLET_NAME} \\
+  --tx ${txBlobLower} \\
+  --rpc-url https://s.altnet.rippletest.net:51234`,
+);
+
+console.log("\nExpected tx hash:", signed.hash);
+
+*/
+
+/// Broadcast a pre-signed transaction directly, skipping key resolution and signing.
+///
+/// Useful for testing the broadcast path in isolation (e.g. passing a blob
+/// already signed by xrpl.js) without going through `sign_encode_and_broadcast`.
+pub fn broadcast_signed(
+    chain: &str,
+    signed_bytes: &[u8],
+    rpc_url: Option<&str>,
+) -> Result<SendResult, OwsLibError> {
+    let chain = parse_chain(chain)?;
+    let rpc = resolve_rpc_url(chain.chain_id, chain.chain_type, rpc_url)?;
+    let tx_hash = broadcast(chain.chain_type, &rpc, signed_bytes)?;
+    Ok(SendResult { tx_hash })
+}
+
+fn broadcast_xrpl(rpc_url: &str, signed_bytes: &[u8]) -> Result<String, OwsLibError> {
+    // XRPL expects uppercase hex in the tx_blob field.
+    let tx_blob = hex::encode_upper(signed_bytes);
+    let body = serde_json::json!({
+        "method": "submit",
+        "params": [{ "tx_blob": tx_blob }]
+    });
+    let resp_str = curl_post_json(rpc_url, &body.to_string())?;
+    let resp: serde_json::Value = serde_json::from_str(&resp_str)?;
+
+    // Surface engine errors before trying to extract the hash.
+    let engine_result = resp["result"]["engine_result"].as_str().unwrap_or("");
+    if !engine_result.starts_with("tes") {
+        let msg = resp["result"]["engine_result_message"]
+            .as_str()
+            .unwrap_or(engine_result);
+        return Err(OwsLibError::BroadcastFailed(format!(
+            "XRPL submit failed ({engine_result}): {msg}"
+        )));
+    }
+
+    resp["result"]["tx_json"]["hash"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            OwsLibError::BroadcastFailed(format!("no hash in XRPL response: {resp_str}"))
+        })
 }
 
 fn broadcast_evm(rpc_url: &str, signed_bytes: &[u8]) -> Result<String, OwsLibError> {
@@ -923,7 +1057,9 @@ mod tests {
     #[test]
     fn derive_address_all_chains() {
         let phrase = generate_mnemonic(12).unwrap();
-        let chains = ["evm", "solana", "bitcoin", "cosmos", "tron", "ton", "sui", "xrpl"];
+        let chains = [
+            "evm", "solana", "bitcoin", "cosmos", "tron", "ton", "sui", "xrpl",
+        ];
         for chain in &chains {
             let addr = derive_address(&phrase, chain, None).unwrap();
             assert!(!addr.is_empty(), "address should be non-empty for {chain}");
