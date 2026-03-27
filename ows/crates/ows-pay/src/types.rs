@@ -108,6 +108,8 @@ pub struct X402Response {
     #[serde(default)]
     pub x402_version: Option<u32>,
     pub accepts: Vec<PaymentRequirements>,
+    #[serde(default)]
+    pub resource: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
