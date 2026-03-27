@@ -200,7 +200,10 @@ fn parse_requirements(
                 if let Ok(decoded) = B64.decode(header_str) {
                     if let Ok(parsed) = serde_json::from_slice::<X402Response>(&decoded) {
                         if !parsed.accepts.is_empty() {
-                            let version = parsed.x402_version.unwrap_or(1);
+                            let version = match *header_name {
+                                HEADER_PAYMENT_REQUIRED_V2 => parsed.x402_version.unwrap_or(2),
+                                _ => parsed.x402_version.unwrap_or(1),
+                            };
                             return Ok((version, parsed.resource, parsed.accepts));
                         }
                     }
@@ -316,6 +319,11 @@ mod tests {
     use base64::{engine::general_purpose::STANDARD as B64, Engine};
     use ows_core::ChainType;
     use reqwest::header::HeaderMap;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
 
     fn base_requirement() -> PaymentRequirements {
         PaymentRequirements {
@@ -329,6 +337,85 @@ mod tests {
             description: Some("test service".into()),
             resource: None,
         }
+    }
+
+    fn read_headers(stream: &mut std::net::TcpStream) -> String {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        loop {
+            match stream.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&chunk[..n]);
+                    if buf.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    break;
+                }
+                Err(err) => panic!("failed to read request: {err}"),
+            }
+        }
+
+        String::from_utf8(buf).unwrap()
+    }
+
+    fn header_value(request: &str, header_name: &str) -> String {
+        request
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if name.eq_ignore_ascii_case(header_name) {
+                    Some(value.trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| panic!("missing header {header_name} in request:\n{request}"))
+    }
+
+    fn decode_payment_payload(encoded: &str) -> PaymentPayload {
+        let decoded = B64.decode(encoded).unwrap();
+        serde_json::from_slice(&decoded).unwrap()
+    }
+
+    fn spawn_x402_flow_server(
+        payment_header_name: &str,
+        payment_header_value: String,
+    ) -> (String, mpsc::Receiver<String>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let header_name = payment_header_name.to_string();
+
+        let handle = thread::spawn(move || {
+            let (mut initial_stream, _) = listener.accept().unwrap();
+            let _initial_request = read_headers(&mut initial_stream);
+            let first_response = format!(
+                "HTTP/1.1 402 Payment Required\r\nContent-Length: 0\r\nConnection: close\r\n{header_name}: {payment_header_value}\r\n\r\n"
+            );
+            initial_stream.write_all(first_response.as_bytes()).unwrap();
+
+            let (mut retry_stream, _) = listener.accept().unwrap();
+            let retry_request = read_headers(&mut retry_stream);
+            tx.send(retry_request).unwrap();
+
+            let second_response =
+                "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok";
+            retry_stream.write_all(second_response.as_bytes()).unwrap();
+        });
+
+        (format!("http://{addr}"), rx, handle)
     }
 
     // -----------------------------------------------------------------------
@@ -522,6 +609,62 @@ mod tests {
         let (_, _, reqs) = parse_requirements(&headers, "not json").unwrap();
         assert_eq!(reqs.len(), 1);
         assert_eq!(reqs[0].pay_to, "0xv2");
+    }
+
+    #[test]
+    fn parse_requirements_v2_header_defaults_version_to_2() {
+        let x402 = serde_json::json!({
+            "accepts": [{
+                "scheme": "exact",
+                "network": "eip155:8453",
+                "amount": "5000",
+                "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "payTo": "0xv2"
+            }]
+        });
+        let encoded = B64.encode(serde_json::to_string(&x402).unwrap().as_bytes());
+
+        let mut headers = HeaderMap::new();
+        headers.insert("payment-required", encoded.parse().unwrap());
+
+        let (version, _, reqs) = parse_requirements(&headers, "not json").unwrap();
+        assert_eq!(version, 2);
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].pay_to, "0xv2");
+    }
+
+    #[test]
+    fn v2_header_without_version_builds_v2_payment_payload() {
+        let x402 = serde_json::json!({
+            "accepts": [{
+                "scheme": "exact",
+                "network": "eip155:8453",
+                "amount": "5000",
+                "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "payTo": "0xv2",
+                "extra": {
+                    "name": "USD Coin",
+                    "version": "2"
+                }
+            }]
+        });
+        let encoded = B64.encode(serde_json::to_string(&x402).unwrap().as_bytes());
+
+        let mut headers = HeaderMap::new();
+        headers.insert("payment-required", encoded.parse().unwrap());
+
+        let (version, resource, reqs) = parse_requirements(&headers, "not json").unwrap();
+        let (req, network) = pick_payment_option(&EvmWallet, &reqs).unwrap();
+        let (payload, _) =
+            build_signed_payment(&EvmWallet, req, &network, version, resource).unwrap();
+
+        match payload {
+            PaymentPayload::V2(v2) => {
+                assert_eq!(v2.x402_version, 2);
+                assert_eq!(v2.accepted.pay_to, "0xv2");
+            }
+            PaymentPayload::V1(_) => panic!("expected v2 payload for payment-required header"),
+        }
     }
 
     #[test]
@@ -772,5 +915,90 @@ mod tests {
         assert!(account.address.starts_with("0x"));
         let sig = wallet.sign_payload("exact", "eip155:8453", "{}").unwrap();
         assert_eq!(sig, "0xdeadbeef");
+    }
+
+    #[tokio::test]
+    async fn pay_retries_v1_flow_with_v1_payload() {
+        let x402 = serde_json::json!({
+            "accepts": [{
+                "scheme": "exact",
+                "network": "eip155:8453",
+                "amount": "5000",
+                "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "payTo": "0xv1",
+                "extra": {
+                    "name": "USD Coin",
+                    "version": "2"
+                }
+            }]
+        });
+        let encoded = B64.encode(serde_json::to_string(&x402).unwrap().as_bytes());
+        let (url, rx, handle) = spawn_x402_flow_server("x-payment-required", encoded);
+
+        let result = crate::pay(&EvmWallet, &url, "GET", None).await.unwrap();
+        let retry_request = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        handle.join().unwrap();
+
+        assert_eq!(result.status, 200);
+        assert_eq!(result.body, "ok");
+
+        let x_payment = header_value(&retry_request, "X-PAYMENT");
+        let payment_signature = header_value(&retry_request, "payment-signature");
+        assert_eq!(x_payment, payment_signature);
+
+        match decode_payment_payload(&x_payment) {
+            PaymentPayload::V1(v1) => {
+                assert_eq!(v1.x402_version, 1);
+                assert_eq!(v1.network, "eip155:8453");
+                assert_eq!(v1.payload["authorization"]["to"], "0xv1");
+            }
+            PaymentPayload::V2(_) => panic!("expected v1 payload for x-payment-required flow"),
+        }
+    }
+
+    #[tokio::test]
+    async fn pay_retries_v2_flow_with_v2_payload_without_explicit_version() {
+        let resource = serde_json::json!({
+            "uri": "https://api.example.com/paid"
+        });
+        let x402 = serde_json::json!({
+            "resource": resource,
+            "accepts": [{
+                "scheme": "exact",
+                "network": "eip155:8453",
+                "amount": "5000",
+                "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "payTo": "0xv2",
+                "extra": {
+                    "name": "USD Coin",
+                    "version": "2"
+                }
+            }]
+        });
+        let encoded = B64.encode(serde_json::to_string(&x402).unwrap().as_bytes());
+        let (url, rx, handle) = spawn_x402_flow_server("payment-required", encoded);
+
+        let result = crate::pay(&EvmWallet, &url, "GET", None).await.unwrap();
+        let retry_request = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        handle.join().unwrap();
+
+        assert_eq!(result.status, 200);
+        assert_eq!(result.body, "ok");
+
+        let x_payment = header_value(&retry_request, "X-PAYMENT");
+        let payment_signature = header_value(&retry_request, "payment-signature");
+        assert_eq!(x_payment, payment_signature);
+
+        match decode_payment_payload(&payment_signature) {
+            PaymentPayload::V2(v2) => {
+                assert_eq!(v2.x402_version, 2);
+                assert_eq!(v2.accepted.pay_to, "0xv2");
+                assert_eq!(
+                    v2.resource,
+                    Some(serde_json::json!({"uri": "https://api.example.com/paid"}))
+                );
+            }
+            PaymentPayload::V1(_) => panic!("expected v2 payload for payment-required flow"),
+        }
     }
 }
