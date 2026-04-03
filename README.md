@@ -38,11 +38,17 @@ The language bindings are **fully self-contained** — they embed the Rust core 
 # Create a wallet (derives addresses for the current auto-derived chain set)
 ows wallet create --name "agent-treasury"
 
-# Sign a message
+# Sign a message (EVM)
 ows sign message --wallet agent-treasury --chain ethereum --message "hello"
 
-# Sign a transaction
-ows sign tx --wallet agent-treasury --chain ethereum --tx "deadbeef..."
+# Sign on Solana
+ows sign message --wallet agent-treasury --chain solana --message "hello"
+
+# Sign a Bitcoin transaction
+ows sign tx --wallet agent-treasury --chain bitcoin --tx "0200000001..."
+
+# Use a bare EVM chain ID for Base
+ows sign tx --wallet agent-treasury --chain 8453 --tx "02f8..."
 ```
 
 ```javascript

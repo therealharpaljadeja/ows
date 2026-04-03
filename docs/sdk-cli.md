@@ -251,7 +251,17 @@ ows key revoke --id <key-id> --confirm
 Sign a message with chain-specific formatting (e.g., EIP-191 for EVM, `\x19TRON Signed Message` for Tron).
 
 ```bash
+# EVM (Ethereum mainnet)
 ows sign message --wallet "my-wallet" --chain ethereum --message "hello world"
+
+# Solana
+ows sign message --wallet "my-wallet" --chain solana --message "hello world"
+
+# Bitcoin
+ows sign message --wallet "my-wallet" --chain bitcoin --message "hello world"
+
+# Base via bare chain ID
+ows sign message --wallet "my-wallet" --chain 8453 --message "hello world"
 ```
 
 | Flag | Description |
@@ -269,6 +279,7 @@ Sign a raw transaction (hex-encoded bytes).
 
 ```bash
 ows sign tx --wallet "my-wallet" --chain ethereum --tx "02f8..."
+ows sign tx --wallet "my-wallet" --chain solana --tx "deadbeef..."
 ```
 
 | Flag | Description |
@@ -295,7 +306,7 @@ ows mnemonic generate --words 24
 Derive an address from a mnemonic for a given chain. Reads the mnemonic from the `OWS_MNEMONIC` environment variable or stdin.
 
 ```bash
-echo "word1 word2 ..." | ows mnemonic derive --chain evm
+echo "word1 word2 ..." | ows mnemonic derive --chain ethereum
 ```
 
 ## Payment Commands
