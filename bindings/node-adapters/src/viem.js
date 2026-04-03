@@ -29,8 +29,9 @@ function owsToViemAccount(walletNameOrId, options = {}) {
       const sig = result.signature.startsWith("0x") ? result.signature.slice(2) : result.signature;
       const r = `0x${sig.slice(0, 64)}`;
       const s = `0x${sig.slice(64, 128)}`;
-      const v = BigInt(`0x${sig.slice(128, 130)}`);
-      const signed = serializeTransaction(typeof transaction === "string" ? {} : transaction, { r, s, v: v === 0n ? 27n : v < 27n ? v + 27n : v });
+      const recoveryByte = parseInt(sig.slice(128, 130), 16);
+      const yParity = recoveryByte >= 27 ? recoveryByte - 27 : recoveryByte;
+      const signed = serializeTransaction(typeof transaction === "string" ? {} : transaction, { r, s, yParity });
       return signed;
     },
     async signTypedData(typedData) {
