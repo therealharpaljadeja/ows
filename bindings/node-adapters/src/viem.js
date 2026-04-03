@@ -22,10 +22,10 @@ function owsToViemAccount(walletNameOrId, options = {}) {
       return result.signature.startsWith("0x") ? result.signature : `0x${result.signature}`;
     },
     async signTransaction(transaction) {
-      const { keccak256, serializeTransaction } = require("viem");
+      const { serializeTransaction } = require("viem");
       const serialized = typeof transaction === "string" ? transaction : serializeTransaction(transaction);
-      const hash = keccak256(serialized).slice(2);
-      const result = signTransaction(walletNameOrId, chain, hash, options.passphrase, options.index, options.vaultPath);
+      const txHex = serialized.startsWith("0x") ? serialized.slice(2) : serialized;
+      const result = signTransaction(walletNameOrId, chain, txHex, options.passphrase, options.index, options.vaultPath);
       const sig = result.signature.startsWith("0x") ? result.signature.slice(2) : result.signature;
       const r = `0x${sig.slice(0, 64)}`;
       const s = `0x${sig.slice(64, 128)}`;
