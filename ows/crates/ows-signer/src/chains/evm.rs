@@ -379,9 +379,16 @@ mod tests {
         // A nonce string far exceeding u64 range should be rejected, not churn CPU.
         let huge_nonce = "9".repeat(10_000);
         let err = signer
-            .authorization_payload("8453", "0x1111111111111111111111111111111111111111", &huge_nonce)
+            .authorization_payload(
+                "8453",
+                "0x1111111111111111111111111111111111111111",
+                &huge_nonce,
+            )
             .unwrap_err();
-        assert!(err.to_string().contains("exceeds"), "expected size error, got: {err}");
+        assert!(
+            err.to_string().contains("exceeds"),
+            "expected size error, got: {err}"
+        );
     }
 
     #[test]
